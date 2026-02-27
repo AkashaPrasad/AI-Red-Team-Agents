@@ -64,7 +64,7 @@ services:
       target: development
     command: >
       watchfiles --filter python
-      "celery -A app.workers.celery_app worker --loglevel=debug --concurrency=2"
+      "celery -A app.worker.celery_app worker --loglevel=debug --concurrency=2"
       /app/app
     env_file:
       - ../env/.env.development

@@ -99,7 +99,7 @@ services:
     container_name: art-worker
     restart: unless-stopped
     command: >
-      celery -A app.workers.celery_app worker
+      celery -A app.worker.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
       --max-tasks-per-child=50
