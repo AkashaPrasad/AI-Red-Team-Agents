@@ -1,0 +1,74 @@
+# ==============================================================================
+# Git Ignore — AI Red Team Agent Monorepo
+# ==============================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.Python
+
+# --- Virtual Environment ---
+venv/
+.venv/
+env/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Environment Variables ---
+.env
+.env.local
+.env.production
+!infra/env/.env.example
+!infra/env/.env.development
+
+# --- Node ---
+node_modules/
+frontend/dist/
+frontend/build/
+*.tsbuildinfo
+
+# --- Database ---
+*.sqlite3
+*.db
+
+# --- Coverage & Testing ---
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+coverage/
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Logs ---
+*.log
+logs/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Celery ---
+celerybeat-schedule
+celerybeat.pid
+
+# --- MyPy ---
+.mypy_cache/
+
+# --- Ruff ---
+.ruff_cache/

@@ -1,0 +1,175 @@
+// ---------------------------------------------------------------------------
+// ProviderCard — displays a single provider with actions
+// ---------------------------------------------------------------------------
+
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import CardActions from '@mui/material/CardActions';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
+import Avatar from '@mui/material/Avatar';
+import CircularProgress from '@mui/material/CircularProgress';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import LinkIcon from '@mui/icons-material/Link';
+import PersonIcon from '@mui/icons-material/Person';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import RoleGuard from '@/components/auth/RoleGuard';
+import { formatDate } from '@/utils/formatters';
+import type { Provider } from '@/types/provider';
+
+interface ProviderCardProps {
+    provider: Provider;
+    validating?: boolean;
+    onValidate: (id: string) => void;
+    onEdit: (provider: Provider) => void;
+    onDelete: (provider: Provider) => void;
+}
+
+const TYPE_GRADIENT: Record<string, string> = {
+    openai: 'linear-gradient(135deg, #10b981, #34d399)',
+    azure_openai: 'linear-gradient(135deg, #3b82f6, #60a5fa)',
+    groq: 'linear-gradient(135deg, #f59e0b, #fbbf24)',
+};
+
+export default function ProviderCard({
+    provider,
+    validating,
+    onValidate,
+    onEdit,
+    onDelete,
+}: ProviderCardProps) {
+    const typeLabelMap: Record<string, string> = {
+        openai: 'OpenAI',
+        azure_openai: 'Azure OpenAI',
+        groq: 'Groq',
+    };
+    const typeLabel = typeLabelMap[provider.provider_type] ?? provider.provider_type;
+    const gradient = TYPE_GRADIENT[provider.provider_type] ?? 'linear-gradient(135deg, #6366f1, #8b5cf6)';
+
+    return (
+        <Card
+            variant="outlined"
+            sx={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)',
+                '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: (theme) =>
+                        `0 8px 20px -4px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.35)' : 'rgba(99,102,241,0.12)'}`,
+                },
+            }}
+        >
+            {/* Top accent */}
+            <Box sx={{ height: 4, width: '100%', background: gradient, borderRadius: '16px 16px 0 0' }} />
+
+            <CardContent sx={{ flex: 1, pt: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                    <Avatar sx={{ width: 40, height: 40, background: gradient, fontSize: 18 }}>
+                        <SmartToyIcon sx={{ fontSize: 20 }} />
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <Typography
+                                variant="subtitle1"
+                                sx={{
+                                    fontWeight: 700,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {provider.name}
+                            </Typography>
+                            {provider.is_valid === true && (
+                                <CheckCircleIcon color="success" sx={{ fontSize: 16 }} />
+                            )}
+                            {provider.is_valid === false && (
+                                <CancelIcon color="error" sx={{ fontSize: 16 }} />
+                            )}
+                        </Box>
+                        <Chip label={typeLabel} size="small" color="primary" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
+                    </Box>
+                </Box>
+
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <VpnKeyIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary">
+                            {provider.api_key_preview}
+                        </Typography>
+                    </Box>
+
+                    {provider.endpoint_url && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <LinkIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                            <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            >
+                                {provider.endpoint_url}
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {provider.model && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <SmartToyIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                            <Typography variant="caption" color="text.secondary">
+                                {provider.model}
+                            </Typography>
+                        </Box>
+                    )}
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
+                        <PersonIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary">
+                            {provider.created_by.email} · {formatDate(provider.created_at)}
+                        </Typography>
+                    </Box>
+                </Box>
+            </CardContent>
+
+            <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 2, pt: 0, gap: 0.5 }}>
+                <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => onValidate(provider.id)}
+                    disabled={validating}
+                    startIcon={
+                        validating ? <CircularProgress size={14} /> : <VerifiedIcon sx={{ fontSize: 16 }} />
+                    }
+                >
+                    Validate
+                </Button>
+                <Tooltip title="Edit provider">
+                    <IconButton size="small" onClick={() => onEdit(provider)}>
+                        <EditIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
+                <RoleGuard allowedRoles={['admin']}>
+                    <Tooltip title="Delete provider">
+                        <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => onDelete(provider)}
+                        >
+                            <DeleteIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                </RoleGuard>
+            </CardActions>
+        </Card>
+    );
+}
