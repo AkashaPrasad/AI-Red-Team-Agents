@@ -10,7 +10,6 @@ Provides:
 
 import ssl as _ssl
 from collections.abc import AsyncGenerator
-from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -26,8 +25,14 @@ from app.config import settings
 # Neon / Supabase poolers use PgBouncer which doesn't support prepared
 # statements.  Detect cloud hosts and disable the asyncpg statement cache.
 # They also require TLS with an explicit SSLContext for asyncpg.
-_db_host = urlsplit(settings.async_database_url).hostname or settings.postgres_host
-_is_cloud_pg = _db_host not in {"localhost", "127.0.0.1", ""}
+# Direct-IP connections (e.g. GCP Cloud SQL) don't need this treatment.
+import re as _re
+_is_ip_address = bool(_re.match(r'^\d{1,3}(\.\d{1,3}){3}$', settings.postgres_host))
+_is_cloud_pg = (
+    settings.postgres_host != "localhost"
+    and "127.0.0.1" not in settings.postgres_host
+    and not _is_ip_address  # Direct IP = GCP Cloud SQL etc., no PgBouncer/SSL needed
+)
 
 _cloud_connect_args: dict = {}
 if _is_cloud_pg:
@@ -62,6 +67,37 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+# ---------------------------------------------------------------------------
+# Standalone factory for background threads (separate event loop)
+# ---------------------------------------------------------------------------
+def create_standalone_session_factory() -> tuple["AsyncSession", "create_async_engine"]:
+    """Create a brand-new engine + session factory.
+
+    Use this when running in a thread with its own ``asyncio`` event loop
+    (e.g. the experiment runner).  The global ``async_engine`` is bound to
+    the *main* loop and will raise "Future attached to a different loop"
+    if used from another one.
+
+    Returns ``(engine, SessionFactory)``.
+    """
+    engine = create_async_engine(
+        settings.async_database_url,
+        echo=settings.app_debug,
+        pool_size=5,
+        max_overflow=5,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_timeout=30,
+        **({"connect_args": _cloud_connect_args} if _is_cloud_pg else {}),
+    )
+    factory = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    return engine, factory
 
 
 # ---------------------------------------------------------------------------

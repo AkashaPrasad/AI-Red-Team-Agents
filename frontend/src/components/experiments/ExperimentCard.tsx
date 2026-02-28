@@ -43,6 +43,9 @@ export default function ExperimentCard({
     const navigate = useNavigate();
     const isRunning = experiment.status === 'running' || experiment.status === 'pending';
     const isCompleted = experiment.status === 'completed';
+    const isFailed = experiment.status === 'failed';
+    const isCancelled = experiment.status === 'cancelled';
+    const hasResults = isCompleted || isFailed || isCancelled;
 
     const duration =
         experiment.started_at && experiment.completed_at
@@ -108,21 +111,54 @@ export default function ExperimentCard({
                     <Chip label={experiment.testing_level} size="small" variant="outlined" />
                 </Box>
 
-                {isCompleted && experiment.pass_rate != null && (
+                {hasResults && experiment.pass_rate != null && (
                     <Box
                         sx={{
                             mb: 2,
                             p: 1.5,
                             borderRadius: 2,
                             bgcolor: (theme) =>
-                                theme.palette.mode === 'dark' ? 'rgba(16,185,129,0.08)' : 'rgba(16,185,129,0.06)',
+                                isFailed
+                                    ? theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)'
+                                    : theme.palette.mode === 'dark' ? 'rgba(16,185,129,0.08)' : 'rgba(16,185,129,0.06)',
                             border: '1px solid',
                             borderColor: (theme) =>
-                                theme.palette.mode === 'dark' ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.15)',
+                                isFailed
+                                    ? theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)'
+                                    : theme.palette.mode === 'dark' ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.15)',
                         }}
                     >
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: isFailed ? 'error.main' : 'success.main' }}>
                             Pass Rate: {formatPercent(experiment.pass_rate != null ? experiment.pass_rate * 100 : null)}
+                            {isFailed && ' (partial)'}
+                        </Typography>
+                    </Box>
+                )}
+
+                {isFailed && experiment.error_message && (
+                    <Box
+                        sx={{
+                            mb: 2,
+                            p: 1.5,
+                            borderRadius: 2,
+                            bgcolor: (theme) =>
+                                theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)',
+                            border: '1px solid',
+                            borderColor: (theme) =>
+                                theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.12)',
+                        }}
+                    >
+                        <Typography
+                            variant="caption"
+                            sx={{
+                                color: 'error.main',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                            }}
+                        >
+                            {experiment.error_message}
                         </Typography>
                     </Box>
                 )}
@@ -148,7 +184,7 @@ export default function ExperimentCard({
             </CardContent>
 
             <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 2, pt: 0 }}>
-                {isCompleted && (
+                {hasResults && (
                     <Button
                         size="small"
                         variant="contained"
@@ -159,10 +195,12 @@ export default function ExperimentCard({
                             )
                         }
                         sx={{
-                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                            background: isFailed
+                                ? 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)'
+                                : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                         }}
                     >
-                        View Results
+                        {isFailed ? 'View Partial Results' : 'View Results'}
                     </Button>
                 )}
                 {isRunning && (

@@ -5,7 +5,7 @@ All settings are loaded from environment variables (or .env file).
 This module is imported by database.py, Alembic env.py, and the FastAPI app factory.
 """
 
-from urllib.parse import parse_qsl, quote as _urlquote, urlencode, urlsplit, urlunsplit
+from urllib.parse import quote as _urlquote
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -60,7 +60,6 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
     jwt_algorithm: str = "HS256"
-    google_oauth_client_id: str = ""
 
     # --- Rate Limiting ---
     firewall_rate_limit_per_minute: int = 100
@@ -89,30 +88,9 @@ class Settings(BaseSettings):
         ``ssl.SSLContext`` passed in ``connect_args`` (see database.py).
         """
         if self.database_url:
-            url = self.database_url.strip()
-            if url.startswith("postgres://"):
-                url = f"postgresql://{url.removeprefix('postgres://')}"
-            if url.startswith("postgresql://"):
-                url = f"postgresql+asyncpg://{url.removeprefix('postgresql://')}"
-            if url.startswith("postgresql+psycopg2://"):
-                url = f"postgresql+asyncpg://{url.removeprefix('postgresql+psycopg2://')}"
-
-            # asyncpg TLS is configured through connect_args
-            parts = urlsplit(url)
-            query = [
-                (k, v)
-                for k, v in parse_qsl(parts.query, keep_blank_values=True)
-                if k.lower() not in {"ssl", "sslmode"}
-            ]
-            url = urlunsplit(
-                (
-                    parts.scheme,
-                    parts.netloc,
-                    parts.path,
-                    urlencode(query),
-                    parts.fragment,
-                )
-            )
+            url = self.database_url
+            # Remove ssl query param — asyncpg uses connect_args ssl context
+            url = url.replace("?ssl=require", "").replace("&ssl=require", "")
             return url
         return (
             f"postgresql+asyncpg://{_urlquote(self.postgres_user, safe='')}:{_urlquote(self.postgres_password, safe='')}"
@@ -122,42 +100,15 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         """Sync database URL for Alembic migrations."""
-        if self.database_url:
-            url = self.database_url.strip()
-            if url.startswith("postgres://"):
-                url = f"postgresql://{url.removeprefix('postgres://')}"
-            if url.startswith("postgresql://"):
-                url = f"postgresql+psycopg2://{url.removeprefix('postgresql://')}"
-            if url.startswith("postgresql+asyncpg://"):
-                url = f"postgresql+psycopg2://{url.removeprefix('postgresql+asyncpg://')}"
-
-            parts = urlsplit(url)
-            host = parts.hostname or ""
-            query = [
-                (k, v)
-                for k, v in parse_qsl(parts.query, keep_blank_values=True)
-                if k.lower() != "ssl"
-            ]
-            has_sslmode = any(k.lower() == "sslmode" for k, _ in query)
-            is_cloud_host = host not in {"", "localhost", "127.0.0.1"}
-            if is_cloud_host and not has_sslmode:
-                query.append(("sslmode", "require"))
-            return urlunsplit(
-                (
-                    parts.scheme,
-                    parts.netloc,
-                    parts.path,
-                    urlencode(query),
-                    parts.fragment,
-                )
-            )
-
         base = (
             f"postgresql+psycopg2://{_urlquote(self.postgres_user, safe='')}:{_urlquote(self.postgres_password, safe='')}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
-        # Cloud databases (Neon, Supabase, etc.) require SSL
-        if self.postgres_host != "localhost" and "127.0.0.1" not in self.postgres_host:
+        # Cloud databases (Neon, Supabase, etc.) require SSL.
+        # Direct-IP connections (e.g. GCP Cloud SQL) typically don't.
+        import re
+        _is_ip = bool(re.match(r'^\d{1,3}(\.\d{1,3}){3}$', self.postgres_host))
+        if self.postgres_host != "localhost" and "127.0.0.1" not in self.postgres_host and not _is_ip:
             base += "?sslmode=require"
         return base
 

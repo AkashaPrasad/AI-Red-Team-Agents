@@ -71,6 +71,7 @@ async def send_prompt(
     prompt: str,
     *,
     thread_id: str | None = None,
+    gateway: object | None = None,
     retries: int = 3,
     backoff_base: float = 2.0,
 ) -> tuple[str | None, int]:
@@ -84,7 +85,7 @@ async def send_prompt(
 
     # ── Direct Provider shortcut ──
     if target.endpoint_url.startswith("direct://"):
-        return await _send_direct(target, prompt)
+        return await _send_direct(target, prompt, gateway=gateway)
 
     # Build payload from template
     payload_str = target.payload_template.replace("{{prompt}}", prompt)
@@ -199,59 +200,97 @@ async def init_thread(target: "TargetConfig") -> str | None:
 async def _send_direct(
     target: "TargetConfig",
     prompt: str,
+    *,
+    gateway: object | None = None,
+    retries: int = 5,
+    backoff_base: float = 2.0,
 ) -> tuple[str | None, int]:
     """
-    Send a prompt through the platform's LLMGateway by loading the provider
-    from the database.  The ``direct://<provider_id>`` URL pattern signals
-    this code path.
+    Send a prompt through the platform's LLMGateway.  When a pre-built
+    ``gateway`` is provided (normal code-path from the experiment runner)
+    it is used directly — no DB lookup needed.  Otherwise falls back to
+    loading the provider from the database.
+
+    The ``direct://<provider_id>`` URL pattern signals this code path.
+
+    Includes retry-with-exponential-backoff for rate-limit (429) errors.
 
     Returns (response_text, latency_ms).
     """
+    import asyncio
     import time
     from uuid import UUID
 
-    from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     from app.services.llm_gateway import LLMGateway
-    from app.storage.database import AsyncSessionLocal
-    from app.storage.models.provider import ModelProvider
 
-    provider_id_str = target.endpoint_url.removeprefix("direct://")
     start = time.monotonic()
 
     try:
-        provider_uuid = UUID(provider_id_str)
-    except ValueError:
-        logger.error("Invalid provider UUID in direct:// URL: %s", provider_id_str)
-        return None, 0
+        # If no gateway was passed, load provider from DB (fallback path)
+        if gateway is None:
+            from sqlalchemy import select
+            from app.storage.database import create_standalone_session_factory
+            from app.storage.models.provider import ModelProvider
 
-    try:
-        async with AsyncSessionLocal() as session:  # type: AsyncSession
-            row = await session.execute(
-                select(ModelProvider).where(ModelProvider.id == provider_uuid)
+            provider_id_str = target.endpoint_url.removeprefix("direct://")
+            try:
+                provider_uuid = UUID(provider_id_str)
+            except ValueError:
+                logger.error("Invalid provider UUID in direct:// URL: %s", provider_id_str)
+                return None, 0
+
+            _engine, _SessionFactory = create_standalone_session_factory()
+            try:
+                async with _SessionFactory() as session:
+                    row = await session.execute(
+                        select(ModelProvider).where(ModelProvider.id == provider_uuid)
+                    )
+                    provider = row.scalar_one_or_none()
+            finally:
+                await _engine.dispose()
+
+            if provider is None:
+                logger.error("Provider %s not found for direct mode", provider_id_str)
+                return None, 0
+
+            gateway = LLMGateway(
+                provider_type=provider.provider_type,
+                encrypted_api_key=provider.encrypted_api_key,
+                endpoint_url=provider.endpoint_url,
+                model=provider.model,
             )
-            provider = row.scalar_one_or_none()
-
-        if provider is None:
-            logger.error("Provider %s not found for direct mode", provider_id_str)
-            return None, 0
-
-        # Build gateway (encrypted_api_key is decrypted inside the gateway)
-        gateway = LLMGateway(
-            provider_type=provider.provider_type,
-            encrypted_api_key=provider.encrypted_api_key,
-            endpoint_url=provider.endpoint_url,
-            model=provider.model,
-        )
 
         messages = []
         if target.system_prompt:
             messages.append({"role": "system", "content": target.system_prompt})
         messages.append({"role": "user", "content": prompt})
-        response_text = await gateway.chat(messages)
+
+        # Retry loop with exponential backoff for rate-limit errors
+        last_exc = None
+        for attempt in range(retries):
+            try:
+                response_text = await gateway.chat(messages)
+                latency_ms = int((time.monotonic() - start) * 1000)
+                return response_text, latency_ms
+            except Exception as exc:
+                last_exc = exc
+                exc_str = str(exc).lower()
+                # Retry on rate-limit (429) or server errors (5xx)
+                if "429" in exc_str or "rate" in exc_str or "too many" in exc_str or "503" in exc_str:
+                    wait = backoff_base ** attempt
+                    logger.warning(
+                        "Direct call rate-limited (attempt %d/%d), retrying in %.1fs: %s",
+                        attempt + 1, retries, wait, exc,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                # Non-retryable error
+                raise
+
+        # All retries exhausted
         latency_ms = int((time.monotonic() - start) * 1000)
-        return response_text, latency_ms
+        logger.error("Direct provider call exhausted %d retries for %s: %s", retries, provider_id_str, last_exc)
+        return None, latency_ms
 
     except Exception as exc:
         latency_ms = int((time.monotonic() - start) * 1000)

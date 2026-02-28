@@ -35,8 +35,8 @@ export const SUB_TYPE_LABELS: Record<string, string> = {
     owasp_llm_top10: 'OWASP LLM Top 10',
     owasp_agentic: 'OWASP Agentic',
     adaptive: 'Adaptive (Multi-Turn)',
-    user_interaction: 'User Interaction',
-    functional: 'Functional',
+    happy_path: 'Happy Path',
+    edge_cases: 'Edge Cases',
     scope_validation: 'Scope Validation',
 };
 

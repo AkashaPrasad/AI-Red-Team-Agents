@@ -21,6 +21,7 @@ from app.api.schemas.providers import (
     ProviderUpdate,
     ProviderValidationResult,
 )
+from app.api.schemas.shared import UserBrief
 from app.services.audit import write_audit_log
 from app.services.encryption import decrypt_value, encrypt_value, mask_secret
 from app.services.llm_gateway import LLMGateway
@@ -34,19 +35,13 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _to_response(provider: ModelProvider, user: User | None = None) -> ProviderResponse:
+def _to_response(provider: ModelProvider) -> ProviderResponse:
     """Convert ORM model to response schema."""
     try:
         plain_key = decrypt_value(provider.encrypted_api_key)
         preview = mask_secret(plain_key)
     except Exception:
         preview = "***"
-
-    created_by = None
-    owner = user or getattr(provider, "owner", None)
-    if owner:
-        from app.api.schemas.shared import UserBrief
-        created_by = UserBrief(id=owner.id, email=owner.email, full_name=owner.full_name)
 
     return ProviderResponse(
         id=provider.id,
@@ -56,7 +51,7 @@ def _to_response(provider: ModelProvider, user: User | None = None) -> ProviderR
         model=provider.model,
         api_key_preview=preview,
         is_valid=provider.is_valid,
-        created_by=created_by,
+        created_by=None,
         created_at=provider.created_at,
         updated_at=provider.updated_at,
     )
@@ -71,7 +66,7 @@ async def list_providers(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ProviderList:
-    """List all providers visible to the current user."""
+    """List all providers owned by the current user."""
     result = await session.execute(
         select(ModelProvider)
         .where(ModelProvider.owner_id == current_user.id)
@@ -79,7 +74,7 @@ async def list_providers(
     )
     providers = result.scalars().all()
     return ProviderList(
-        items=[_to_response(p, current_user) for p in providers],
+        items=[_to_response(p) for p in providers],
         total=len(providers),
     )
 
@@ -92,7 +87,7 @@ async def get_provider(
 ) -> ProviderResponse:
     """Get a single provider by ID."""
     provider = await _get_provider_or_404(provider_id, current_user, session)
-    return _to_response(provider, current_user)
+    return _to_response(provider)
 
 
 @router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
@@ -109,12 +104,10 @@ async def create_provider(
             detail="endpoint_url is required for Azure OpenAI providers",
         )
 
-    encrypted_api_key = encrypt_value(body.api_key)
-
     # Validate credentials
     gateway = LLMGateway(
         provider_type=body.provider_type,
-        encrypted_api_key=encrypted_api_key,
+        encrypted_api_key=encrypt_value(body.api_key),
         endpoint_url=body.endpoint_url,
         model=body.model,
     )
@@ -124,7 +117,7 @@ async def create_provider(
         owner_id=current_user.id,
         name=body.name,
         provider_type=body.provider_type,
-        encrypted_api_key=encrypted_api_key,
+        encrypted_api_key=encrypt_value(body.api_key),
         endpoint_url=body.endpoint_url,
         model=body.model,
         is_valid=is_valid,
@@ -141,7 +134,7 @@ async def create_provider(
         ip_address=request.client.host if request.client else None,
     )
 
-    return _to_response(provider, current_user)
+    return _to_response(provider)
 
 
 @router.put("/{provider_id}", response_model=ProviderResponse)
@@ -184,7 +177,7 @@ async def update_provider(
         ip_address=request.client.host if request.client else None,
     )
 
-    return _to_response(provider, current_user)
+    return _to_response(provider)
 
 
 @router.delete("/{provider_id}", responses={204: {"description": "Provider deleted"}})

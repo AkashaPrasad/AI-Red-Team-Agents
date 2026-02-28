@@ -37,10 +37,10 @@ export default function FirewallIntegration({ data, loading }: FirewallIntegrati
         );
     }
 
-    const snippets: Record<SnippetLang, string> = {
-        python: data.python_snippet ?? '# No snippet available yet',
-        javascript: data.javascript_snippet ?? '// No snippet available yet',
-        curl: data.curl_snippet ?? '# No snippet available yet',
+    const snippets = data.snippets ?? {
+        python: '# No snippet available yet',
+        javascript: '// No snippet available yet',
+        curl: '# No snippet available yet',
     };
     const currentSnippet = snippets[snippetTab] ?? '';
 

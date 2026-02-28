@@ -71,7 +71,7 @@ export function useFirewallLogs(
             }),
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (lastPage) =>
-            lastPage.cursor ? lastPage.cursor : undefined,
+            lastPage.has_more ? lastPage.next_cursor : undefined,
         enabled: !!projectId,
     });
 }

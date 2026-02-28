@@ -2,7 +2,7 @@
 // Provider types (matches backend schemas/providers.py)
 // ---------------------------------------------------------------------------
 
-import type { UserBrief } from './api';
+import type { UserBrief, PaginatedResponse } from './api';
 
 export type ProviderType = 'openai' | 'azure_openai' | 'groq';
 
@@ -34,10 +34,7 @@ export interface Provider {
     updated_at: string;
 }
 
-export interface ProviderList {
-    items: Provider[];
-    total: number;
-}
+export type ProviderList = PaginatedResponse<Provider>;
 
 export interface ProviderValidationResult {
     is_valid: boolean;

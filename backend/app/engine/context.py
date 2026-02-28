@@ -47,10 +47,10 @@ class ProviderInfo:
     """Decrypted provider credentials."""
 
     provider_id: UUID
-    provider_type: str  # "openai" | "azure_openai" | "groq"
+    provider_type: str  # "openai" | "azure_openai"
     api_key: str  # Decrypted
     endpoint_url: str | None = None
-    model: str | None = None  # None → let LLMGateway pick a provider-appropriate default
+    model: str = "gpt-4o"
 
 
 @dataclass

@@ -40,7 +40,7 @@ from app.engine.sampler import select_representatives
 from app.engine.scorer import compute_analytics, generate_insights
 from app.services.encryption import decrypt_value
 from app.services.llm_gateway import LLMGateway
-from app.storage.database import AsyncSessionLocal
+from app.storage.database import AsyncSessionLocal, create_standalone_session_factory
 from app.storage.models.experiment import Experiment
 from app.storage.models.project import Project
 from app.storage.models.provider import ModelProvider
@@ -57,9 +57,10 @@ TESTING_LEVEL_COUNTS: dict[str, int] = {
 }
 
 # Engine settings
-BATCH_SIZE = getattr(settings, "experiment_batch_size", 25)
+BATCH_SIZE = getattr(settings, "experiment_batch_size", 5)
 ERROR_THRESHOLD_WINDOW = 50
-ERROR_THRESHOLD_RATE = 0.30
+ERROR_THRESHOLD_RATE = 0.60
+INTER_REQUEST_DELAY = 1.0  # pause between LLM calls to respect Groq rate-limits
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +126,6 @@ async def _load_context(
         provider_type=provider.provider_type,
         api_key=decrypt_value(provider.encrypted_api_key),
         endpoint_url=provider.endpoint_url,
-        model=provider.model,
     )
 
     total_tests = TESTING_LEVEL_COUNTS.get(experiment.testing_level, 500)
@@ -197,7 +197,14 @@ async def run_experiment_async(experiment_id: UUID) -> None:
     """Full async experiment execution pipeline."""
     start_time = time.monotonic()
 
-    async with AsyncSessionLocal() as session:
+    # Create a standalone engine + session factory for this event loop.
+    # The global AsyncSessionLocal is bound to the *main* web-server loop;
+    # using it from a background thread causes "Future attached to a
+    # different loop".
+    _engine, _SessionFactory = create_standalone_session_factory()
+
+    try:
+      async with _SessionFactory() as session:
         # --- 1. LOAD CONTEXT ---
         try:
             ctx = await _load_context(experiment_id, session)
@@ -230,13 +237,12 @@ async def run_experiment_async(experiment_id: UUID) -> None:
         await _update_progress(experiment_id, 0, ctx.total_tests)
 
         # Build LLM gateway (provider.api_key is already decrypted)
-        # Let LLMGateway.model pick a provider-appropriate default when no
-        # explicit model is stored on the provider (e.g. Groq → llama-3.3-70b).
+        # Don't force a specific model — let the gateway pick a
+        # provider-appropriate default (e.g. llama-3.3-70b-versatile for Groq).
         gateway = LLMGateway(
             provider_type=ctx.provider.provider_type,
             api_key=ctx.provider.api_key,
             endpoint_url=ctx.provider.endpoint_url,
-            model=ctx.provider.model,
         )
 
         # Validate provider credentials
@@ -325,6 +331,7 @@ async def run_experiment_async(experiment_id: UUID) -> None:
         result_records: list[dict] = []
         recent_errors = 0
         recent_window: list[bool] = []  # True = error
+        failure_reason: str | None = None  # Set if loop ends early
 
         try:
             for batch_start in range(0, actual_total, BATCH_SIZE):
@@ -341,12 +348,16 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                     )
                     await session.commit()
                     logger.info("Experiment %s cancelled", experiment_id)
-                    return
+                    # Still compute partial analytics below
+                    failure_reason = "Experiment cancelled by user"
+                    break
 
                 batch = all_prompts[batch_start : batch_start + BATCH_SIZE]
 
                 for gp in batch:
-                  try:
+                    # Throttle to respect provider rate limits
+                    await asyncio.sleep(INTER_REQUEST_DELAY)
+
                     # Execute against target
                     if gp.conversation_plan and ctx.turn_mode == "multi_turn":
                         # Multi-turn execution
@@ -356,11 +367,12 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                     else:
                         # Single-turn execution
                         response_text, latency_ms = await send_prompt(
-                            ctx.target, gp.prompt_text
+                            ctx.target, gp.prompt_text, gateway=gateway
                         )
                         conversation = None
 
                     # Judge
+                    await asyncio.sleep(INTER_REQUEST_DELAY)
                     verdict = await judge_evaluate(
                         ctx=ctx,
                         gateway=gateway,
@@ -419,61 +431,12 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                     if len(recent_window) >= ERROR_THRESHOLD_WINDOW:
                         err_rate = sum(recent_window) / len(recent_window)
                         if err_rate > ERROR_THRESHOLD_RATE:
-                            await session.execute(
-                                update(Experiment)
-                                .where(Experiment.id == experiment_id)
-                                .values(
-                                    status="failed",
-                                    error_message=f"Error threshold exceeded: {err_rate:.0%} errors in last {ERROR_THRESHOLD_WINDOW} tests",
-                                    completed_at=datetime.now(timezone.utc),
-                                    progress_completed=completed,
-                                )
-                            )
-                            await session.commit()
-                            return
+                            failure_reason = f"Error threshold exceeded: {err_rate:.0%} errors in last {ERROR_THRESHOLD_WINDOW} tests"
+                            break
 
-                  except Exception as tc_exc:
-                    # Individual test-case failure — log and record as error
-                    logger.warning(
-                        "Test case %d failed for experiment %s: %s",
-                        gp.sequence_order, experiment_id, tc_exc,
-                    )
-                    tc = TestCase(
-                        experiment_id=experiment_id,
-                        prompt=gp.prompt_text,
-                        response=None,
-                        conversation=None,
-                        risk_category=gp.risk_category,
-                        data_strategy=gp.data_strategy,
-                        attack_converter=gp.converter_applied,
-                        sequence_order=gp.sequence_order,
-                        is_representative=False,
-                        latency_ms=0,
-                    )
-                    session.add(tc)
-                    await session.flush()
-                    res = Result(
-                        test_case_id=tc.id,
-                        result="error",
-                        severity=None,
-                        confidence=0.0,
-                        explanation=f"Test execution error: {tc_exc}",
-                        owasp_mapping=gp.owasp_id,
-                    )
-                    session.add(res)
-                    result_records.append({
-                        "id": tc.id,
-                        "status": "error",
-                        "severity": None,
-                        "risk_category": gp.risk_category,
-                        "owasp_mapping": gp.owasp_id,
-                        "confidence": 0.0,
-                        "latency_ms": 0,
-                    })
-                    completed += 1
-                    recent_window.append(True)
-                    if len(recent_window) > ERROR_THRESHOLD_WINDOW:
-                        recent_window.pop(0)
+                # Break outer loop too if failure detected
+                if failure_reason:
+                    break
 
                 # Commit batch & update progress
                 await session.commit()
@@ -487,19 +450,18 @@ async def run_experiment_async(experiment_id: UUID) -> None:
 
         except Exception as e:
             logger.exception("Experiment %s execution failed at test %d: %s", experiment_id, completed, e)
-            await session.rollback()
-            await session.execute(
-                update(Experiment)
-                .where(Experiment.id == experiment_id)
-                .values(
-                    status="failed",
-                    error_message=f"Execution failed after {completed} tests: {e}",
-                    completed_at=datetime.now(timezone.utc),
-                    progress_completed=completed,
-                )
-            )
-            await session.commit()
-            return
+            failure_reason = f"Execution failed after {completed} tests: {e}"
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+
+        # Commit any remaining unflushed test cases from the last batch
+        if not failure_reason:
+            try:
+                await session.commit()
+            except Exception:
+                pass
 
         # --- 5. SAMPLE representatives ---
         tc_dicts = result_records
@@ -513,43 +475,72 @@ async def run_experiment_async(experiment_id: UUID) -> None:
             )
             await session.commit()
 
-        # --- 6. SCORE — compute analytics ---
+        # --- 6. SCORE — compute analytics (even for partial results) ---
         duration = int(time.monotonic() - start_time)
-        analytics = compute_analytics(result_records, duration)
+        analytics = compute_analytics(result_records, duration) if result_records else None
 
-        # Generate AI insights
-        try:
-            insight_items = await generate_insights(analytics, ctx, gateway)
-            analytics.insights = {
-                "summary": insight_items[0].description if insight_items else "",
-                "key_findings": [i.title for i in insight_items],
-                "risk_assessment": analytics.fail_impact,
-                "recommendations": [i.recommendation for i in insight_items],
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        except Exception:
-            pass
+        if analytics:
+            # Generate AI insights (skip for tiny partial runs)
+            if not failure_reason or completed >= 10:
+                try:
+                    insight_items = await generate_insights(analytics, ctx, gateway)
+                    analytics.insights = {
+                        "summary": insight_items[0].description if insight_items else "",
+                        "key_findings": [i.title for i in insight_items],
+                        "risk_assessment": analytics.fail_impact,
+                        "recommendations": [i.recommendation for i in insight_items],
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                except Exception:
+                    pass
 
-        # Write analytics to experiment
-        analytics_dict = dataclasses.asdict(analytics)
-        await session.execute(
-            update(Experiment)
-            .where(Experiment.id == experiment_id)
-            .values(analytics=analytics_dict)
-        )
-        await session.commit()
+            # Write analytics to experiment
+            analytics_dict = dataclasses.asdict(analytics)
+            await session.execute(
+                update(Experiment)
+                .where(Experiment.id == experiment_id)
+                .values(analytics=analytics_dict)
+            )
+            await session.commit()
 
         # --- 7. FINALISE ---
-        await session.execute(
-            update(Experiment)
-            .where(Experiment.id == experiment_id)
-            .values(
-                status="completed",
-                completed_at=datetime.now(timezone.utc),
-                progress_completed=completed,
+        if failure_reason:
+            final_status = "cancelled" if "cancelled" in failure_reason.lower() else "failed"
+            await session.execute(
+                update(Experiment)
+                .where(Experiment.id == experiment_id)
+                .values(
+                    status=final_status,
+                    error_message=failure_reason,
+                    completed_at=datetime.now(timezone.utc),
+                    progress_completed=completed,
+                )
             )
-        )
-        await session.commit()
+            await session.commit()
+            logger.warning(
+                "Experiment %s %s after %d tests: %s",
+                experiment_id,
+                final_status,
+                completed,
+                failure_reason,
+            )
+        else:
+            await session.execute(
+                update(Experiment)
+                .where(Experiment.id == experiment_id)
+                .values(
+                    status="completed",
+                    completed_at=datetime.now(timezone.utc),
+                    progress_completed=completed,
+                )
+            )
+            await session.commit()
+            logger.info(
+                "Experiment %s completed: %d tests, TPI=%.1f",
+                experiment_id,
+                completed,
+                analytics.tpi_score if analytics else 0,
+            )
 
         # Clean up Redis progress
         rd = await _get_redis()
@@ -560,13 +551,9 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                 await rd.aclose()
             except Exception:
                 pass
-
-        logger.info(
-            "Experiment %s completed: %d tests, TPI=%.1f",
-            experiment_id,
-            completed,
-            analytics.tpi_score,
-        )
+    finally:
+        # Dispose the standalone engine to release all connections
+        await _engine.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +589,7 @@ async def _execute_multi_turn(
             ctx.target,
             turn_text,
             thread_id=thread_id,
+            gateway=gateway,
         )
         total_latency += latency
         ai_text = response_text or ""

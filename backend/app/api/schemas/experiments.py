@@ -173,6 +173,7 @@ class ExperimentSummary(BaseModel):
     status: str
     progress: ExperimentProgress
     pass_rate: float | None = None
+    error_message: str | None = None
     created_by: UserBrief | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None

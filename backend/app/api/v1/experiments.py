@@ -226,10 +226,27 @@ async def create_experiment(
 
     if not use_celery:
         import asyncio as _asyncio
+        import threading
         from app.engine.runner import run_experiment_async
-        # Commit so the background coroutine can read the experiment from DB
+        # Commit so the background thread can read the experiment from DB
         await session.commit()
-        _asyncio.get_event_loop().create_task(run_experiment_async(experiment.id))
+
+        def _run_in_thread(exp_id):
+            """Run experiment in a dedicated thread with its own event loop."""
+            loop = _asyncio.new_event_loop()
+            _asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run_experiment_async(exp_id))
+            finally:
+                loop.close()
+
+        t = threading.Thread(
+            target=_run_in_thread,
+            args=(experiment.id,),
+            daemon=True,
+            name=f"experiment-{experiment.id}",
+        )
+        t.start()
 
     await write_audit_log(
         session,
@@ -301,7 +318,7 @@ async def list_experiments(
     for exp in experiments:
         progress = await _get_progress(exp)
         pass_rate = None
-        if exp.status == "completed" and exp.analytics:
+        if exp.status in ("completed", "failed", "cancelled") and exp.analytics:
             pass_rate = exp.analytics.get("pass_rate")
 
         created_by = None
@@ -322,6 +339,7 @@ async def list_experiments(
             status=exp.status,
             progress=progress,
             pass_rate=pass_rate,
+            error_message=exp.error_message if exp.status in ("failed", "cancelled") else None,
             created_by=created_by,
             started_at=exp.started_at,
             completed_at=exp.completed_at,

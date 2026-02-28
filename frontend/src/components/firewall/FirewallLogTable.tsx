@@ -61,7 +61,7 @@ export default function FirewallLogTable({
                                     </Typography>
                                 </TableCell>
                                 <TableCell>
-                                    <StatusBadge status={log.verdict_status ? 'passed' : 'blocked'} />
+                                    <StatusBadge status={log.verdict_status} />
                                 </TableCell>
                                 <TableCell>
                                     {log.fail_category ? (

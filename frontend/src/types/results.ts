@@ -77,10 +77,7 @@ export interface LogEntry {
     result: VerdictResult;
     severity: Severity | null;
     risk_category: string | null;
-    owasp_mapping: string | null;
-    confidence: number | null;
     data_strategy: string | null;
-    latency_ms: number | null;
     is_representative: boolean;
     has_feedback: boolean;
     created_at: string;

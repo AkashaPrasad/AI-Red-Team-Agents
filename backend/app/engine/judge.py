@@ -267,13 +267,16 @@ async def evaluate(
     expected_behaviour: str | None = None,
     conversation: list[dict] | None = None,
     escalation_strategy: str | None = None,
-    max_retries: int = 2,
+    max_retries: int = 4,
 ) -> JudgeVerdict:
     """
     Evaluate a single test case via the LLM-as-Judge.
 
     Uses structured JSON output with retry on parse failure.
+    Includes exponential backoff for rate-limit (429) errors.
     """
+    import asyncio
+
     if conversation and escalation_strategy:
         system = _build_multi_turn_judge_prompt(ctx, conversation, risk_category, escalation_strategy)
     else:
@@ -312,8 +315,13 @@ async def evaluate(
                 confidence=confidence,
             )
 
-        except Exception:
+        except Exception as exc:
             if attempt < max_retries:
+                exc_str = str(exc).lower()
+                # Exponential backoff for rate-limit errors
+                if "429" in exc_str or "rate" in exc_str or "too many" in exc_str:
+                    wait = 2.0 ** attempt
+                    await asyncio.sleep(wait)
                 continue
             return JudgeVerdict(
                 status="error",
