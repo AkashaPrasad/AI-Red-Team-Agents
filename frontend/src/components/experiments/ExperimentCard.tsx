@@ -14,6 +14,7 @@ import Avatar from '@mui/material/Avatar';
 import ScienceIcon from '@mui/icons-material/Science';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CancelIcon from '@mui/icons-material/Cancel';
+import DeleteIcon from '@mui/icons-material/Delete';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import TimerIcon from '@mui/icons-material/Timer';
 import ExperimentStatusChip from './ExperimentStatusChip';
@@ -26,14 +27,18 @@ interface ExperimentCardProps {
     projectId: string;
     experiment: ExperimentSummary;
     cancelling?: boolean;
+    deleting?: boolean;
     onCancel: (eid: string) => void;
+    onDelete: (eid: string) => void;
 }
 
 export default function ExperimentCard({
     projectId,
     experiment,
     cancelling,
+    deleting,
     onCancel,
+    onDelete,
 }: ExperimentCardProps) {
     const navigate = useNavigate();
     const isRunning = experiment.status === 'running' || experiment.status === 'pending';
@@ -170,6 +175,18 @@ export default function ExperimentCard({
                         onClick={() => onCancel(experiment.id)}
                     >
                         Cancel
+                    </Button>
+                )}
+                {!isRunning && (
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        disabled={deleting}
+                        onClick={() => onDelete(experiment.id)}
+                    >
+                        Delete
                     </Button>
                 )}
             </CardActions>

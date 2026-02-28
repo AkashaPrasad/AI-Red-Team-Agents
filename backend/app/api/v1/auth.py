@@ -1,7 +1,5 @@
 """
 Auth router — login, register, refresh, me.
-
-Paths are relative to the ``/auth`` prefix assigned in ``main.py``.
 """
 
 from __future__ import annotations
@@ -23,7 +21,7 @@ from app.api.deps import (
 from app.config import settings
 from app.services.audit import write_audit_log
 from app.storage.database import get_async_session
-from app.storage.models import Organization, User
+from app.storage.models import User
 
 router = APIRouter(prefix="/auth")
 
@@ -57,10 +55,7 @@ class UserResponse(BaseModel):
     id: str
     email: str
     full_name: str | None = None
-    role: str
     is_active: bool
-    organization_id: str
-    organization_name: str | None = None
     created_at: str
     updated_at: str
 
@@ -77,10 +72,7 @@ def _user_to_response(user: User) -> UserResponse:
         id=str(user.id),
         email=user.email,
         full_name=user.full_name,
-        role=user.role,
         is_active=user.is_active,
-        organization_id=str(user.organization_id),
-        organization_name=user.organization.name if user.organization else None,
         created_at=user.created_at.isoformat() if user.created_at else "",
         updated_at=user.updated_at.isoformat() if user.updated_at else "",
     )
@@ -143,7 +135,7 @@ async def register(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Create a new user in the default organization, return JWT pair."""
+    """Create a new user account, return JWT pair."""
     # Check for duplicate email
     existing = await session.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
@@ -152,23 +144,10 @@ async def register(
             detail="Email already registered",
         )
 
-    # Resolve the default organization
-    org_result = await session.execute(
-        select(Organization).where(Organization.slug == "default")
-    )
-    org = org_result.scalar_one_or_none()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Default organization not found. Run seed script first.",
-        )
-
     user = User(
         email=body.email,
         hashed_password=hash_password(body.password),
         full_name=body.full_name,
-        role="member",
-        organization_id=org.id,
     )
     session.add(user)
     await session.flush()

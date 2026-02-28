@@ -13,7 +13,6 @@ import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import LoadingButton from '@mui/lab/LoadingButton';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import RoleGuard from '@/components/auth/RoleGuard';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import type { Project, ProjectUpdate } from '@/types/project';
 
@@ -141,39 +140,35 @@ export default function ProjectSettings({
                     </Alert>
                 )}
 
-                <RoleGuard allowedRoles={['admin']}>
-                    <LoadingButton
-                        variant="outlined"
-                        loading={regenerating}
-                        onClick={() => {
-                            onRegenerateKey();
-                        }}
-                    >
-                        Regenerate API Key
-                    </LoadingButton>
-                </RoleGuard>
+                <LoadingButton
+                    variant="outlined"
+                    loading={regenerating}
+                    onClick={() => {
+                        onRegenerateKey();
+                    }}
+                >
+                    Regenerate API Key
+                </LoadingButton>
             </Paper>
 
             {/* Danger Zone */}
-            <RoleGuard allowedRoles={['admin']}>
-                <Paper sx={{ p: 3, borderColor: 'error.main', borderWidth: 1, borderStyle: 'solid' }}>
-                    <Typography variant="h6" color="error" gutterBottom>
-                        Danger Zone
-                    </Typography>
-                    <Divider sx={{ mb: 2 }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Deleting this project will permanently remove all experiments, results,
-                        and firewall configurations.
-                    </Typography>
-                    <Button
-                        variant="outlined"
-                        color="error"
-                        onClick={() => setDeleteOpen(true)}
-                    >
-                        Delete Project
-                    </Button>
-                </Paper>
-            </RoleGuard>
+            <Paper sx={{ p: 3, borderColor: 'error.main', borderWidth: 1, borderStyle: 'solid' }}>
+                <Typography variant="h6" color="error" gutterBottom>
+                    Danger Zone
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Deleting this project will permanently remove all experiments, results,
+                    and firewall configurations.
+                </Typography>
+                <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={() => setDeleteOpen(true)}
+                >
+                    Delete Project
+                </Button>
+            </Paper>
 
             <ConfirmDialog
                 open={deleteOpen}

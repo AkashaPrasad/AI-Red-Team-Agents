@@ -93,13 +93,11 @@ def create_app() -> FastAPI:
     from app.api.v1.results import router as results_router
     from app.api.v1.feedback import router as feedback_router
     from app.api.v1.firewall import router as firewall_router
-    from app.api.v1.organizations import router as organizations_router
     from app.api.v1.chat import router as chat_router
 
     prefix = settings.api_v1_prefix  # "/api/v1"
 
     app.include_router(auth_router, prefix=prefix, tags=["auth"])
-    app.include_router(organizations_router, prefix=prefix, tags=["organizations"])
     app.include_router(providers_router, prefix=prefix, tags=["providers"])
     app.include_router(projects_router, prefix=prefix, tags=["projects"])
     app.include_router(experiments_router, prefix=prefix, tags=["experiments"])

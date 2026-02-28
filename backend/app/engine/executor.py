@@ -90,11 +90,19 @@ async def send_prompt(
     payload_str = target.payload_template.replace("{{prompt}}", prompt)
     if thread_id and "{{thread_id}}" in payload_str:
         payload_str = payload_str.replace("{{thread_id}}", thread_id)
+    if target.system_prompt and "{{system_prompt}}" in payload_str:
+        payload_str = payload_str.replace("{{system_prompt}}", target.system_prompt)
 
     try:
         payload = json.loads(payload_str)
     except json.JSONDecodeError:
         payload = {"prompt": prompt}
+
+    # Auto-inject system prompt into "messages" array if present and not
+    # already handled via the {{system_prompt}} placeholder
+    if target.system_prompt and "{{system_prompt}}" not in target.payload_template:
+        if isinstance(payload, dict) and "messages" in payload and isinstance(payload["messages"], list):
+            payload["messages"].insert(0, {"role": "system", "content": target.system_prompt})
 
     # Build headers
     headers = dict(target.headers) if target.headers else {}
@@ -237,7 +245,10 @@ async def _send_direct(
             model=provider.model,
         )
 
-        messages = [{"role": "user", "content": prompt}]
+        messages = []
+        if target.system_prompt:
+            messages.append({"role": "system", "content": target.system_prompt})
+        messages.append({"role": "user", "content": prompt})
         response_text = await gateway.chat(messages)
         latency_ms = int((time.monotonic() - start) * 1000)
         return response_text, latency_ms

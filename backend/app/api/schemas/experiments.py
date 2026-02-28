@@ -38,6 +38,7 @@ class TargetConfig(BaseModel):
     timeout_seconds: int = Field(30, ge=5, le=120)
     thread_endpoint_url: str | None = Field(None, max_length=500)
     thread_id_path: str | None = Field(None, max_length=200)
+    system_prompt: str | None = Field(None, max_length=10000)
 
     @model_validator(mode="after")
     def validate_cross_fields(self) -> "TargetConfig":
@@ -118,6 +119,7 @@ class TargetConfigResponse(BaseModel):
     timeout_seconds: int
     thread_endpoint_url: str | None = None
     thread_id_path: str | None = None
+    system_prompt: str | None = None
 
 
 class ExperimentProgress(BaseModel):

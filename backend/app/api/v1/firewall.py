@@ -22,7 +22,7 @@ from sqlalchemy import cast, case, func, select, and_, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.api.deps import require_admin, require_member
+from app.api.deps import require_member
 from app.api.schemas.firewall import (
     DailyStats,
     FirewallEvalRequest,
@@ -62,7 +62,7 @@ async def _get_project_or_404(
 ) -> Project:
     stmt = select(Project).where(
         Project.id == project_id,
-        Project.organization_id == user.organization_id,
+        Project.owner_id == user.id,
     )
     result = await session.execute(stmt)
     project = result.scalar_one_or_none()
@@ -189,7 +189,7 @@ async def list_rules(
 async def create_rule(
     project_id: UUID,
     body: FirewallRuleCreate,
-    user: User = Depends(require_admin),
+    user: User = Depends(require_member),
     session: AsyncSession = Depends(get_async_session),
 ):
     project = await _get_project_or_404(project_id, user, session)
@@ -245,7 +245,7 @@ async def update_rule(
     project_id: UUID,
     rule_id: UUID,
     body: FirewallRuleUpdate,
-    user: User = Depends(require_admin),
+    user: User = Depends(require_member),
     session: AsyncSession = Depends(get_async_session),
 ):
     project = await _get_project_or_404(project_id, user, session)
@@ -310,7 +310,7 @@ async def update_rule(
 async def delete_rule(
     project_id: UUID,
     rule_id: UUID,
-    user: User = Depends(require_admin),
+    user: User = Depends(require_member),
     session: AsyncSession = Depends(get_async_session),
 ):
     project = await _get_project_or_404(project_id, user, session)

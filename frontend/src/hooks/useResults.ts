@@ -14,11 +14,16 @@ const KEYS = {
         ['results', eid, 'logs', tcId] as const,
 };
 
-export function useDashboard(experimentId: string) {
+export function useDashboard(experimentId: string, experimentStatus?: string) {
     return useQuery({
         queryKey: KEYS.dashboard(experimentId),
         queryFn: () => resultsService.getDashboard(experimentId),
-        enabled: !!experimentId,
+        enabled:
+            !!experimentId &&
+            (experimentStatus === 'completed' ||
+                experimentStatus === 'failed' ||
+                experimentStatus === 'cancelled'),
+        retry: false,
     });
 }
 

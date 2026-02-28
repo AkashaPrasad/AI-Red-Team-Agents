@@ -1,12 +1,10 @@
 """
-Authentication & authorisation dependencies for FastAPI routes.
+Authentication dependencies for FastAPI routes.
 
 Provides:
-  - ``get_current_user``   — extract + verify JWT → return User
-  - ``require_admin``      — ensure user.role == "admin"
-  - ``require_member``     — ensure user.role in ("admin", "member")
-  - ``get_project_by_api_key`` — verify Bearer API key for firewall
-                                  (Redis-cached with negative caching per Phase 8 §3.2)
+  - ``get_current_user``         — extract + verify JWT → return User
+  - ``require_member``           — ensure user is authenticated and active
+  - ``get_project_by_api_key``   — verify Bearer API key for firewall
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.config import settings
 from app.storage.database import get_async_session
@@ -93,7 +90,7 @@ async def get_current_user(
         raise credentials_exception
 
     result = await session.execute(
-        select(User).options(joinedload(User.organization)).where(User.id == UUID(user_id))
+        select(User).where(User.id == UUID(user_id))
     )
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
@@ -101,22 +98,10 @@ async def get_current_user(
     return user
 
 
-async def require_admin(
-    current_user: User = Depends(get_current_user),
-) -> User:
-    """Require the current user to have the admin role."""
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
-    return current_user
-
-
 async def require_member(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Any authenticated, active user (member or admin) passes."""
+    """Any authenticated, active user passes."""
     return current_user
 
 
@@ -126,9 +111,7 @@ async def get_project_by_api_key(
 ) -> Project:
     """Verify a project API key from the Authorization header (firewall use).
 
-    Implements Redis-cached auth with negative caching (Phase 8 §3.2):
-      - ``firewall:auth:{hash}`` → project_id  (valid key, TTL 5 min)
-      - ``firewall:auth:{hash}`` → ``"null"``   (invalid key, TTL 5 min)
+    Redis-cached auth with negative caching.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -142,7 +125,7 @@ async def get_project_by_api_key(
     project_id_cached: str | None = None
     try:
         rd = aioredis.Redis.from_url(
-            str(settings.redis_connection_url).replace("/0", "/1"),
+            str(settings.redis_connection_url),
             decode_responses=True,
         )
         cached = await rd.get(f"firewall:auth:{key_hash}")
@@ -163,7 +146,6 @@ async def get_project_by_api_key(
 
     # --- Load project ---
     if project_id_cached:
-        # Cache hit — fast PK lookup
         result = await session.execute(
             select(Project).where(
                 Project.id == UUID(project_id_cached),
@@ -171,17 +153,15 @@ async def get_project_by_api_key(
             )
         )
     else:
-        # Cache miss — hash-based lookup
         result = await session.execute(
             select(Project).where(Project.api_key_hash == key_hash)
         )
 
     project = result.scalar_one_or_none()
     if project is None or not project.is_active:
-        # Negative cache — prevent repeated DB scans for invalid keys
         try:
             rd = aioredis.Redis.from_url(
-                str(settings.redis_connection_url).replace("/0", "/1"),
+                str(settings.redis_connection_url),
                 decode_responses=True,
             )
             await rd.set(f"firewall:auth:{key_hash}", "null", ex=_AUTH_CACHE_TTL)
@@ -193,17 +173,14 @@ async def get_project_by_api_key(
             detail="Invalid API key",
         )
 
-    # Cache the valid lookup (if it wasn't already cached)
+    # Cache the valid lookup
     if not project_id_cached:
         try:
             rd = aioredis.Redis.from_url(
-                str(settings.redis_connection_url).replace("/0", "/1"),
+                str(settings.redis_connection_url),
                 decode_responses=True,
             )
-            data = {
-                "project_id": str(project.id),
-                "organization_id": str(project.organization_id),
-            }
+            data = {"project_id": str(project.id)}
             await rd.set(
                 f"firewall:auth:{key_hash}",
                 json.dumps(data),

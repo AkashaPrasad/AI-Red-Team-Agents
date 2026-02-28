@@ -21,7 +21,7 @@ mypy==1.16.0
 # --- Type Stubs ---
 types-redis==4.6.0.20241004
 types-passlib==1.7.7.20240819
-sqlalchemy[mypy]==2.0.28
+sqlalchemy[mypy]==2.0.41
 
 # --- Development Utilities ---
 ipython==9.2.0

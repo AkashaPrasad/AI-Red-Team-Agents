@@ -5,6 +5,8 @@ All settings are loaded from environment variables (or .env file).
 This module is imported by database.py, Alembic env.py, and the FastAPI app factory.
 """
 
+from urllib.parse import quote as _urlquote
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,8 +41,6 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "changeme"
     database_url: str | None = None
-    supabase_url: str | None = None
-    supabase_key: str | None = None
 
     # --- Redis ---
     redis_host: str = "localhost"
@@ -61,10 +61,6 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
     jwt_algorithm: str = "HS256"
 
-    # --- First Admin ---
-    admin_email: str = "admin@example.com"
-    admin_password: str = "changeme"
-
     # --- Rate Limiting ---
     firewall_rate_limit_per_minute: int = 100
     api_rate_limit_per_minute: int = 60
@@ -81,64 +77,37 @@ class Settings(BaseSettings):
     experiment_retry_delay: int = 5
 
     # --- Database Pool ---
-    database_pool_size: int = 5
-    database_max_overflow: int = 10
+    database_pool_size: int = 2
+    database_max_overflow: int = 3
 
     @property
     def async_database_url(self) -> str:
-        """Construct async database URL from components if not explicitly set."""
+        """Construct async database URL from components if not explicitly set.
+
+        Strips ``?ssl=require`` when present — SSL is handled via an explicit
+        ``ssl.SSLContext`` passed in ``connect_args`` (see database.py).
+        """
         if self.database_url:
-            if self.database_url.startswith("postgresql+psycopg2://"):
-                return self.database_url.replace(
-                    "postgresql+psycopg2://",
-                    "postgresql+asyncpg://",
-                    1,
-                )
-            if self.database_url.startswith("postgresql://"):
-                return self.database_url.replace(
-                    "postgresql://",
-                    "postgresql+asyncpg://",
-                    1,
-                )
-            if self.database_url.startswith("postgres://"):
-                return self.database_url.replace(
-                    "postgres://",
-                    "postgresql+asyncpg://",
-                    1,
-                )
-            return self.database_url
+            url = self.database_url
+            # Remove ssl query param — asyncpg uses connect_args ssl context
+            url = url.replace("?ssl=require", "").replace("&ssl=require", "")
+            return url
         return (
-            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"postgresql+asyncpg://{_urlquote(self.postgres_user, safe='')}:{_urlquote(self.postgres_password, safe='')}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
     @property
     def sync_database_url(self) -> str:
         """Sync database URL for Alembic migrations."""
-        if self.database_url:
-            if self.database_url.startswith("postgresql+asyncpg://"):
-                return self.database_url.replace(
-                    "postgresql+asyncpg://",
-                    "postgresql+psycopg2://",
-                    1,
-                )
-            if self.database_url.startswith("postgresql://"):
-                return self.database_url.replace(
-                    "postgresql://",
-                    "postgresql+psycopg2://",
-                    1,
-                )
-            if self.database_url.startswith("postgres://"):
-                return self.database_url.replace(
-                    "postgres://",
-                    "postgresql+psycopg2://",
-                    1,
-                )
-            return self.database_url
-        return (
-            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
+        base = (
+            f"postgresql+psycopg2://{_urlquote(self.postgres_user, safe='')}:{_urlquote(self.postgres_password, safe='')}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+        # Cloud databases (Neon, Supabase, etc.) require SSL
+        if self.postgres_host != "localhost" and "127.0.0.1" not in self.postgres_host:
+            base += "?sslmode=require"
+        return base
 
     @property
     def redis_connection_url(self) -> str:

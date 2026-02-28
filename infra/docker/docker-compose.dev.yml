@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+      POSTGRES_PASSWORD: devpassword
 
   # --------------------------------------------------------------------------
   # Redis — No password in dev, expose port for redis-cli
@@ -41,13 +41,13 @@ services:
     environment:
       APP_ENV: development
       APP_DEBUG: "true"
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:devpassword@postgres:5432/ai_red_team}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/1}
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: devpassword
+      REDIS_HOST: redis
+      DATABASE_URL: postgresql+asyncpg://postgres:devpassword@postgres:5432/ai_red_team
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_URL: redis://redis:6379/1
     volumes:
       - ../../backend/app:/app/app:cached
       - ../../backend/tests:/app/tests:cached
@@ -64,20 +64,20 @@ services:
       target: development
     command: >
       watchfiles --filter python
-      "celery -A app.worker.celery_app worker --loglevel=debug --concurrency=2"
+      "celery -A app.workers.celery_app worker --loglevel=debug --concurrency=2"
       /app/app
     env_file:
       - ../env/.env.development
     environment:
       APP_ENV: development
       APP_DEBUG: "true"
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:devpassword@postgres:5432/ai_red_team}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/1}
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: devpassword
+      REDIS_HOST: redis
+      DATABASE_URL: postgresql+asyncpg://postgres:devpassword@postgres:5432/ai_red_team
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_URL: redis://redis:6379/1
     volumes:
       - ../../backend/app:/app/app:cached
 

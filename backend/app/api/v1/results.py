@@ -62,7 +62,7 @@ async def _get_experiment_or_404(
         .join(Project, Experiment.project_id == Project.id)
         .where(
             Experiment.id == experiment_id,
-            Project.organization_id == user.organization_id,
+            Project.owner_id == user.id,
         )
     )
     result = await session.execute(stmt)
@@ -133,7 +133,7 @@ async def get_dashboard(
 ):
     experiment = await _get_experiment_or_404(experiment_id, user, session)
 
-    if experiment.status != "completed":
+    if experiment.status not in ("completed", "failed", "cancelled"):
         raise HTTPException(status_code=400, detail="EXPERIMENT_NOT_COMPLETED")
 
     analytics: dict = experiment.analytics or {}

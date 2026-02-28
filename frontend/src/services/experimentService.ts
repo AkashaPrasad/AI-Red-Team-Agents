@@ -67,4 +67,13 @@ export const experimentService = {
         );
         return res.data;
     },
+
+    async deleteExperiment(
+        projectId: string,
+        experimentId: string,
+    ): Promise<void> {
+        await api.delete(
+            `/projects/${projectId}/experiments/${experimentId}`,
+        );
+    },
 };

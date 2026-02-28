@@ -8,6 +8,7 @@ Provides:
     per request and commits / rolls back automatically.
 """
 
+import ssl as _ssl
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -21,6 +22,26 @@ from app.config import settings
 # ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
+# Neon / Supabase poolers use PgBouncer which doesn't support prepared
+# statements.  Detect cloud hosts and disable the asyncpg statement cache.
+# They also require TLS with an explicit SSLContext for asyncpg.
+_is_cloud_pg = (
+    settings.postgres_host != "localhost"
+    and "127.0.0.1" not in settings.postgres_host
+)
+
+_cloud_connect_args: dict = {}
+if _is_cloud_pg:
+    _ctx = _ssl.create_default_context()
+    _ctx.check_hostname = False
+    _ctx.verify_mode = _ssl.CERT_NONE
+    _cloud_connect_args = {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "command_timeout": 30,
+        "ssl": _ctx,
+    }
+
 async_engine = create_async_engine(
     settings.async_database_url,
     echo=settings.app_debug,
@@ -28,6 +49,10 @@ async_engine = create_async_engine(
     max_overflow=settings.database_max_overflow,
     pool_pre_ping=True,
     pool_recycle=300,
+    pool_timeout=30,
+    **({
+        "connect_args": _cloud_connect_args,
+    } if _is_cloud_pg else {}),
 )
 
 # ---------------------------------------------------------------------------

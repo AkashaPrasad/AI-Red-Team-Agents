@@ -28,6 +28,7 @@ export interface TargetConfig {
     timeout_seconds?: number;
     thread_endpoint_url?: string;
     thread_id_path?: string;
+    system_prompt?: string;
 }
 
 export interface ExperimentCreate {

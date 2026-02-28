@@ -66,7 +66,7 @@ async def list_chat_providers(
     """List available (valid) providers for chat use."""
     result = await session.execute(
         select(ModelProvider).where(
-            ModelProvider.organization_id == current_user.organization_id,
+            ModelProvider.owner_id == current_user.id,
         ).order_by(ModelProvider.name)
     )
     providers = result.scalars().all()
@@ -93,7 +93,7 @@ async def send_chat(
     result = await session.execute(
         select(ModelProvider).where(
             ModelProvider.id == body.provider_id,
-            ModelProvider.organization_id == current_user.organization_id,
+            ModelProvider.owner_id == current_user.id,
         )
     )
     provider = result.scalar_one_or_none()
@@ -178,7 +178,7 @@ async def proxy_provider(
     result = await session.execute(
         select(ModelProvider).where(
             ModelProvider.id == provider_id,
-            ModelProvider.organization_id == current_user.organization_id,
+            ModelProvider.owner_id == current_user.id,
         )
     )
     provider = result.scalar_one_or_none()

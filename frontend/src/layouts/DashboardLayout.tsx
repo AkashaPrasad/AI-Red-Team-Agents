@@ -19,7 +19,6 @@ import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import Chip from '@mui/material/Chip';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -27,7 +26,6 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import ShieldIcon from '@mui/icons-material/Shield';
-import BusinessIcon from '@mui/icons-material/Business';
 import ChatIcon from '@mui/icons-material/Chat';
 import { useAuth } from '@/hooks/useAuth';
 import { useUiStore } from '@/store/uiStore';
@@ -36,7 +34,6 @@ import { SIDEBAR_WIDTH } from '@/utils/constants';
 const NAV_ITEMS = [
     { label: 'Dashboard', path: '/', icon: <DashboardIcon /> },
     { label: 'Playground', path: '/playground', icon: <ChatIcon /> },
-    { label: 'Organizations', path: '/settings/organizations', icon: <BusinessIcon /> },
     { label: 'Providers', path: '/settings/providers', icon: <SettingsIcon /> },
 ];
 
@@ -153,7 +150,7 @@ export default function DashboardLayout() {
                             variant="caption"
                             sx={{ color: 'text.secondary', fontSize: '0.6875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}
                         >
-                            {user?.organization_name ?? user?.email}
+                            {user?.email}
                         </Typography>
                     </Box>
                     <Tooltip title="Logout">
@@ -211,16 +208,6 @@ export default function DashboardLayout() {
                         </IconButton>
 
                         <Box sx={{ flexGrow: 1 }} />
-
-                        {user?.role && (
-                            <Chip
-                                label={user.role.toUpperCase()}
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                                sx={{ fontWeight: 700, fontSize: '0.65rem', height: 24, borderRadius: '6px' }}
-                            />
-                        )}
 
                         <Tooltip title={`Switch to ${themeMode === 'light' ? 'dark' : 'light'} mode`}>
                             <IconButton

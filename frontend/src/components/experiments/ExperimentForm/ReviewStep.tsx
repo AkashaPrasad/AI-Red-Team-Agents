@@ -37,6 +37,14 @@ export default function ReviewStep() {
                 ? 'Direct Provider (via platform proxy)'
                 : values.endpoint_url || '—',
         },
+        {
+            label: 'System Prompt',
+            value: values.system_prompt
+                ? values.system_prompt.length > 120
+                    ? values.system_prompt.slice(0, 120) + '…'
+                    : values.system_prompt
+                : '(none)',
+        },
         { label: 'Tests', value: meta?.tests ?? '—' },
         { label: 'Est. Duration', value: meta?.duration ?? '—' },
     ];

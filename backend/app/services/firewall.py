@@ -59,9 +59,9 @@ RULES_CACHE_TTL = 300
 
 
 async def _get_redis() -> aioredis.Redis:
-    """Return a Redis client pointing at DB 1 (application cache)."""
+    """Return a Redis client for application cache."""
     return aioredis.Redis.from_url(
-        str(settings.redis_connection_url).replace("/0", "/1"),
+        str(settings.redis_connection_url),
         decode_responses=True,
     )
 
@@ -77,7 +77,7 @@ async def authenticate_api_key(
 ) -> dict:
     """Authenticate a project API key.
 
-    Returns ``{"project_id": str, "organization_id": str}`` on success.
+    Returns ``{"project_id": str, "owner_id": str}`` on success.
 
     Uses a Redis cache (``firewall:auth:{hash}``) with 5-minute TTL.
     Invalid keys are cached as ``"null"`` to block brute-force attempts.
@@ -101,7 +101,7 @@ async def authenticate_api_key(
 
     # --- Cache miss — query DB ---
     result = await session.execute(
-        select(Project.id, Project.organization_id).where(
+        select(Project.id, Project.owner_id).where(
             Project.api_key_hash == key_hash,
             Project.is_active.is_(True),
         )
@@ -120,7 +120,7 @@ async def authenticate_api_key(
 
     data = {
         "project_id": str(row.id),
-        "organization_id": str(row.organization_id),
+        "owner_id": str(row.owner_id),
     }
 
     try:
@@ -381,7 +381,7 @@ async def evaluate_with_llm(
     prompt: str,
     scope: dict,
     rules: list[dict],
-    organization_id: str,
+    owner_id: str,
     agent_prompt: str | None,
     session: AsyncSession,
 ) -> dict:
@@ -390,9 +390,9 @@ async def evaluate_with_llm(
     Returns a verdict dict. Raises ``HTTPException(400)`` if no provider
     is configured, or ``HTTPException(502)`` if the LLM call fails.
     """
-    # Find a valid provider for this organisation
+    # Find a valid provider for this user
     stmt = select(ModelProvider).where(
-        ModelProvider.organization_id == UUID(organization_id),
+        ModelProvider.owner_id == UUID(owner_id),
         ModelProvider.is_valid.is_(True),
     )
     result = await session.execute(stmt)
@@ -519,7 +519,7 @@ async def evaluate_prompt(
     # 1. Authenticate
     auth = await authenticate_api_key(raw_api_key, session)
     project_id = auth["project_id"]
-    organization_id = auth["organization_id"]
+    owner_id = auth["owner_id"]
 
     # Verify that the path parameter matches the authenticated project
     if project_id != project_id_param:
@@ -565,7 +565,7 @@ async def evaluate_prompt(
         prompt=prompt,
         scope=scope,
         rules=rules,
-        organization_id=organization_id,
+        owner_id=owner_id,
         agent_prompt=agent_prompt,
         session=session,
     )

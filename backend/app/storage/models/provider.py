@@ -1,8 +1,8 @@
 """
 ModelProvider model — LLM provider credentials and configuration.
 
-Stores encrypted API keys for OpenAI, Azure OpenAI, etc.
-API keys are Fernet-encrypted at rest and decrypted only at point-of-use.
+Stores encrypted API keys for OpenAI, Azure OpenAI, Groq, etc.
+Each provider belongs to a single user (owner).
 """
 
 import uuid
@@ -18,16 +18,11 @@ class ModelProvider(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "model_providers"
 
     # --- Foreign Keys ---
-    organization_id: Mapped[uuid.UUID] = mapped_column(
+    owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organizations.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-    )
-    created_by_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
     )
 
     # --- Columns ---
@@ -45,13 +40,9 @@ class ModelProvider(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_valid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # --- Relationships ---
-    organization: Mapped["Organization"] = relationship(  # noqa: F821
-        "Organization",
-        back_populates="model_providers",
-    )
-    created_by: Mapped["User | None"] = relationship(  # noqa: F821
+    owner: Mapped["User"] = relationship(  # noqa: F821
         "User",
-        foreign_keys=[created_by_id],
+        back_populates="providers",
     )
     experiments: Mapped[list["Experiment"]] = relationship(  # noqa: F821
         "Experiment",

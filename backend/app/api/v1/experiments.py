@@ -62,12 +62,13 @@ def _mask_target_config(cfg: dict) -> TargetConfigResponse:
         timeout_seconds=cfg.get("timeout_seconds", 30),
         thread_endpoint_url=cfg.get("thread_endpoint_url"),
         thread_id_path=cfg.get("thread_id_path"),
+        system_prompt=cfg.get("system_prompt"),
     )
 
 
 async def _get_redis() -> aioredis.Redis:
     return aioredis.from_url(
-        settings.redis_connection_url.replace("/0", "/1"),
+        settings.redis_connection_url,
         decode_responses=True,
     )
 
@@ -163,7 +164,7 @@ async def create_experiment(
     proj_result = await session.execute(
         select(Project).where(
             Project.id == project_id,
-            Project.organization_id == current_user.organization_id,
+            Project.owner_id == current_user.id,
         )
     )
     project = proj_result.scalar_one_or_none()
@@ -174,12 +175,12 @@ async def create_experiment(
     prov_result = await session.execute(
         select(ModelProvider).where(
             ModelProvider.id == body.provider_id,
-            ModelProvider.organization_id == current_user.organization_id,
+            ModelProvider.owner_id == current_user.id,
         )
     )
     provider = prov_result.scalar_one_or_none()
     if provider is None:
-        raise HTTPException(status_code=400, detail="Provider not found in organization")
+        raise HTTPException(status_code=400, detail="Provider not found")
     if not provider.is_valid:
         raise HTTPException(status_code=400, detail="Provider is not validated")
 
@@ -265,7 +266,7 @@ async def list_experiments(
     proj_result = await session.execute(
         select(Project.id).where(
             Project.id == project_id,
-            Project.organization_id == current_user.organization_id,
+            Project.owner_id == current_user.id,
         )
     )
     if proj_result.scalar_one_or_none() is None:
@@ -412,6 +413,47 @@ async def cancel_experiment(
 
 
 # ---------------------------------------------------------------------------
+# DELETE — delete an experiment
+# ---------------------------------------------------------------------------
+
+
+@router.delete(
+    "/projects/{project_id}/experiments/{experiment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_experiment(
+    project_id: UUID,
+    experiment_id: UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Delete an experiment and all its test cases / results / feedback (cascade)."""
+    experiment = await _get_experiment_or_404(experiment_id, current_user, session)
+
+    if experiment.status == "running":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete a running experiment. Cancel it first.",
+        )
+
+    await write_audit_log(
+        session,
+        user=current_user,
+        action="experiment.deleted",
+        entity_type="experiment",
+        entity_id=experiment.id,
+        ip_address=request.client.host if request.client else None,
+    )
+
+    await session.delete(experiment)
+    await session.flush()
+
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -432,12 +474,12 @@ async def _get_experiment_or_404(
     if experiment is None:
         raise HTTPException(status_code=404, detail="Experiment not found")
 
-    # Verify org ownership via project
+    # Verify ownership via project
     proj_result = await session.execute(
-        select(Project.organization_id).where(Project.id == experiment.project_id)
+        select(Project.owner_id).where(Project.id == experiment.project_id)
     )
-    org_id = proj_result.scalar_one_or_none()
-    if org_id != user.organization_id:
+    owner_id = proj_result.scalar_one_or_none()
+    if owner_id != user.id:
         raise HTTPException(status_code=404, detail="Experiment not found")
 
     return experiment

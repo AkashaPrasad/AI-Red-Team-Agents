@@ -31,6 +31,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { chatService } from '@/services/chatService';
 import type { ChatMessage } from '@/types/chat';
+import { extractApiError } from '@/utils/errors';
 
 interface DisplayMessage extends ChatMessage {
     id: string;
@@ -85,7 +86,7 @@ export default function ChatPlaygroundPage() {
             ]);
         },
         onError: (err: any) => {
-            const detail = err?.response?.data?.detail ?? 'Request failed';
+            const detail = extractApiError(err, 'Request failed');
             setMessages((prev) => [
                 ...prev,
                 {

@@ -1,7 +1,7 @@
 """
-Providers API routes — Phase 6.1
+Providers API routes — CRUD + validation for model provider configurations.
 
-CRUD + validation for model provider configurations.
+Providers are scoped per user — each user manages their own providers.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_admin
+from app.api.deps import get_current_user
 from app.api.schemas.providers import (
     ProviderCreate,
     ProviderList,
@@ -43,14 +43,6 @@ def _to_response(provider: ModelProvider) -> ProviderResponse:
     except Exception:
         preview = "***"
 
-    created_by = None
-    if provider.created_by:
-        created_by = UserBrief(
-            id=provider.created_by.id,
-            email=provider.created_by.email,
-            full_name=provider.created_by.full_name,
-        )
-
     return ProviderResponse(
         id=provider.id,
         name=provider.name,
@@ -59,7 +51,7 @@ def _to_response(provider: ModelProvider) -> ProviderResponse:
         model=provider.model,
         api_key_preview=preview,
         is_valid=provider.is_valid,
-        created_by=created_by,
+        created_by=None,
         created_at=provider.created_at,
         updated_at=provider.updated_at,
     )
@@ -74,10 +66,10 @@ async def list_providers(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ProviderList:
-    """List all providers in the user's organization."""
+    """List all providers owned by the current user."""
     result = await session.execute(
         select(ModelProvider)
-        .where(ModelProvider.organization_id == current_user.organization_id)
+        .where(ModelProvider.owner_id == current_user.id)
         .order_by(ModelProvider.created_at.desc())
     )
     providers = result.scalars().all()
@@ -102,10 +94,10 @@ async def get_provider(
 async def create_provider(
     body: ProviderCreate,
     request: Request,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ProviderResponse:
-    """Create a new model provider (admin only)."""
+    """Create a new model provider."""
     if body.provider_type == "azure_openai" and not body.endpoint_url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -122,8 +114,7 @@ async def create_provider(
     is_valid, _err = await gateway.validate_credentials()
 
     provider = ModelProvider(
-        organization_id=current_user.organization_id,
-        created_by_id=current_user.id,
+        owner_id=current_user.id,
         name=body.name,
         provider_type=body.provider_type,
         encrypted_api_key=encrypt_value(body.api_key),
@@ -151,10 +142,10 @@ async def update_provider(
     provider_id: UUID,
     body: ProviderUpdate,
     request: Request,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ProviderResponse:
-    """Update a provider (admin only)."""
+    """Update a provider."""
     provider = await _get_provider_or_404(provider_id, current_user, session)
 
     if body.name is not None:
@@ -193,10 +184,10 @@ async def update_provider(
 async def delete_provider(
     provider_id: UUID,
     request: Request,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> Response:
-    """Delete a provider (admin only). 409 if experiments reference it."""
+    """Delete a provider. 409 if experiments reference it."""
     provider = await _get_provider_or_404(provider_id, current_user, session)
 
     # Check for linked experiments
@@ -264,7 +255,7 @@ async def _get_provider_or_404(
     result = await session.execute(
         select(ModelProvider).where(
             ModelProvider.id == provider_id,
-            ModelProvider.organization_id == user.organization_id,
+            ModelProvider.owner_id == user.id,
         )
     )
     provider = result.scalar_one_or_none()

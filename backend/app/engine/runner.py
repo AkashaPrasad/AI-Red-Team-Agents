@@ -101,6 +101,7 @@ async def _load_context(
         timeout_seconds=tc_raw.get("timeout_seconds", 30),
         thread_endpoint_url=tc_raw.get("thread_endpoint_url"),
         thread_id_path=tc_raw.get("thread_id_path"),
+        system_prompt=tc_raw.get("system_prompt"),
     )
 
     # Decrypt auth value if present
@@ -151,7 +152,7 @@ async def _load_context(
 async def _get_redis() -> aioredis.Redis | None:
     try:
         return aioredis.Redis.from_url(
-            str(settings.redis_connection_url).replace("/0", "/1"),
+            str(settings.redis_connection_url),
             decode_responses=True,
         )
     except Exception:
@@ -237,9 +238,9 @@ async def run_experiment_async(experiment_id: UUID) -> None:
 
         # Validate provider credentials
         try:
-            valid = await gateway.validate_credentials()
-            if not valid:
-                raise ValueError("Provider credentials invalid")
+            is_valid, val_error = await gateway.validate_credentials()
+            if not is_valid:
+                raise ValueError(val_error or "Provider credentials invalid")
         except Exception as e:
             await session.execute(
                 update(Experiment)
@@ -254,30 +255,58 @@ async def run_experiment_async(experiment_id: UUID) -> None:
             return
 
         # --- 2. PLAN ---
-        plan = create_test_plan(ctx)
+        try:
+            plan = create_test_plan(ctx)
+        except Exception as e:
+            logger.exception("Test plan creation failed for %s", experiment_id)
+            await session.execute(
+                update(Experiment)
+                .where(Experiment.id == experiment_id)
+                .values(
+                    status="failed",
+                    error_message=f"Test plan creation failed: {e}",
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await session.commit()
+            return
 
         # --- 3. GENERATE ---
         all_prompts: list[GeneratedPrompt] = []
         seq = 0
-        for task in plan.tasks:
-            # Load converters if enabled
-            converters = None
-            if plan.converters_enabled:
-                from app.engine.converters import get_all_converters
-                converters = get_all_converters()
+        try:
+            for task in plan.tasks:
+                # Load converters if enabled
+                converters = None
+                if plan.converters_enabled:
+                    from app.engine.converters import get_all_converters
+                    converters = get_all_converters()
 
-            prompts = await generate_prompts(
-                task=task,
-                ctx=ctx,
-                gateway=gateway,
-                converters=converters,
-                converter_probability=plan.converter_probability,
-                max_converter_chain=plan.max_converter_chain,
-                augmentation_variants=plan.llm_augmentation_variants,
-                start_sequence=seq,
+                prompts = await generate_prompts(
+                    task=task,
+                    ctx=ctx,
+                    gateway=gateway,
+                    converters=converters,
+                    converter_probability=plan.converter_probability,
+                    max_converter_chain=plan.max_converter_chain,
+                    augmentation_variants=plan.llm_augmentation_variants,
+                    start_sequence=seq,
+                )
+                all_prompts.extend(prompts)
+                seq += len(prompts)
+        except Exception as e:
+            logger.exception("Prompt generation failed for %s", experiment_id)
+            await session.execute(
+                update(Experiment)
+                .where(Experiment.id == experiment_id)
+                .values(
+                    status="failed",
+                    error_message=f"Prompt generation failed: {e}",
+                    completed_at=datetime.now(timezone.utc),
+                )
             )
-            all_prompts.extend(prompts)
-            seq += len(prompts)
+            await session.commit()
+            return
 
         # Update total if generation produced different count
         actual_total = len(all_prompts)
@@ -294,119 +323,136 @@ async def run_experiment_async(experiment_id: UUID) -> None:
         recent_errors = 0
         recent_window: list[bool] = []  # True = error
 
-        for batch_start in range(0, actual_total, BATCH_SIZE):
-            # Check cancellation
-            if await _check_cancelled(experiment_id):
+        try:
+            for batch_start in range(0, actual_total, BATCH_SIZE):
+                # Check cancellation
+                if await _check_cancelled(experiment_id):
+                    await session.execute(
+                        update(Experiment)
+                        .where(Experiment.id == experiment_id)
+                        .values(
+                            status="cancelled",
+                            completed_at=datetime.now(timezone.utc),
+                            progress_completed=completed,
+                        )
+                    )
+                    await session.commit()
+                    logger.info("Experiment %s cancelled", experiment_id)
+                    return
+
+                batch = all_prompts[batch_start : batch_start + BATCH_SIZE]
+
+                for gp in batch:
+                    # Execute against target
+                    if gp.conversation_plan and ctx.turn_mode == "multi_turn":
+                        # Multi-turn execution
+                        response_text, latency_ms, conversation = await _execute_multi_turn(
+                            ctx, gp, gateway
+                        )
+                    else:
+                        # Single-turn execution
+                        response_text, latency_ms = await send_prompt(
+                            ctx.target, gp.prompt_text
+                        )
+                        conversation = None
+
+                    # Judge
+                    verdict = await judge_evaluate(
+                        ctx=ctx,
+                        gateway=gateway,
+                        test_prompt=gp.prompt_text,
+                        ai_response=response_text or "",
+                        risk_category=gp.risk_category,
+                        expected_behaviour=gp.expected_behaviour,
+                        conversation=conversation,
+                    )
+
+                    # Write TestCase
+                    tc = TestCase(
+                        experiment_id=experiment_id,
+                        prompt=gp.prompt_text,
+                        response=response_text,
+                        conversation=conversation,
+                        risk_category=gp.risk_category,
+                        data_strategy=gp.data_strategy,
+                        attack_converter=gp.converter_applied,
+                        sequence_order=gp.sequence_order,
+                        is_representative=False,
+                        latency_ms=latency_ms,
+                    )
+                    session.add(tc)
+                    await session.flush()
+
+                    # Write Result
+                    res = Result(
+                        test_case_id=tc.id,
+                        result=verdict.status,
+                        severity=verdict.severity,
+                        confidence=verdict.confidence,
+                        explanation=verdict.explanation,
+                        owasp_mapping=gp.owasp_id,
+                    )
+                    session.add(res)
+
+                    # Track for analytics
+                    result_records.append({
+                        "id": tc.id,
+                        "status": verdict.status,
+                        "severity": verdict.severity,
+                        "risk_category": gp.risk_category,
+                        "owasp_mapping": gp.owasp_id,
+                        "confidence": verdict.confidence,
+                        "latency_ms": latency_ms,
+                    })
+
+                    completed += 1
+
+                    # Error threshold check
+                    is_error = response_text is None or verdict.status == "error"
+                    recent_window.append(is_error)
+                    if len(recent_window) > ERROR_THRESHOLD_WINDOW:
+                        recent_window.pop(0)
+                    if len(recent_window) >= ERROR_THRESHOLD_WINDOW:
+                        err_rate = sum(recent_window) / len(recent_window)
+                        if err_rate > ERROR_THRESHOLD_RATE:
+                            await session.execute(
+                                update(Experiment)
+                                .where(Experiment.id == experiment_id)
+                                .values(
+                                    status="failed",
+                                    error_message=f"Error threshold exceeded: {err_rate:.0%} errors in last {ERROR_THRESHOLD_WINDOW} tests",
+                                    completed_at=datetime.now(timezone.utc),
+                                    progress_completed=completed,
+                                )
+                            )
+                            await session.commit()
+                            return
+
+                # Commit batch & update progress
+                await session.commit()
+                await _update_progress(experiment_id, completed, actual_total)
                 await session.execute(
                     update(Experiment)
                     .where(Experiment.id == experiment_id)
-                    .values(
-                        status="cancelled",
-                        completed_at=datetime.now(timezone.utc),
-                        progress_completed=completed,
-                    )
+                    .values(progress_completed=completed)
                 )
                 await session.commit()
-                logger.info("Experiment %s cancelled", experiment_id)
-                return
 
-            batch = all_prompts[batch_start : batch_start + BATCH_SIZE]
-
-            for gp in batch:
-                # Execute against target
-                if gp.conversation_plan and ctx.turn_mode == "multi_turn":
-                    # Multi-turn execution
-                    response_text, latency_ms, conversation = await _execute_multi_turn(
-                        ctx, gp, gateway
-                    )
-                else:
-                    # Single-turn execution
-                    response_text, latency_ms = await send_prompt(
-                        ctx.target, gp.prompt_text
-                    )
-                    conversation = None
-
-                # Judge
-                verdict = await judge_evaluate(
-                    ctx=ctx,
-                    gateway=gateway,
-                    test_prompt=gp.prompt_text,
-                    ai_response=response_text or "",
-                    risk_category=gp.risk_category,
-                    expected_behaviour=gp.expected_behaviour,
-                    conversation=conversation,
-                )
-
-                # Write TestCase
-                tc = TestCase(
-                    experiment_id=experiment_id,
-                    prompt=gp.prompt_text,
-                    response=response_text,
-                    conversation=conversation,
-                    risk_category=gp.risk_category,
-                    data_strategy=gp.data_strategy,
-                    attack_converter=gp.converter_applied,
-                    sequence_order=gp.sequence_order,
-                    is_representative=False,
-                    latency_ms=latency_ms,
-                )
-                session.add(tc)
-                await session.flush()
-
-                # Write Result
-                res = Result(
-                    test_case_id=tc.id,
-                    result=verdict.status,
-                    severity=verdict.severity,
-                    confidence=verdict.confidence,
-                    explanation=verdict.explanation,
-                    owasp_mapping=gp.owasp_id,
-                )
-                session.add(res)
-
-                # Track for analytics
-                result_records.append({
-                    "id": tc.id,
-                    "status": verdict.status,
-                    "severity": verdict.severity,
-                    "risk_category": gp.risk_category,
-                    "owasp_mapping": gp.owasp_id,
-                    "confidence": verdict.confidence,
-                    "latency_ms": latency_ms,
-                })
-
-                completed += 1
-
-                # Error threshold check
-                is_error = response_text is None or verdict.status == "error"
-                recent_window.append(is_error)
-                if len(recent_window) > ERROR_THRESHOLD_WINDOW:
-                    recent_window.pop(0)
-                if len(recent_window) >= ERROR_THRESHOLD_WINDOW:
-                    err_rate = sum(recent_window) / len(recent_window)
-                    if err_rate > ERROR_THRESHOLD_RATE:
-                        await session.execute(
-                            update(Experiment)
-                            .where(Experiment.id == experiment_id)
-                            .values(
-                                status="failed",
-                                error_message=f"Error threshold exceeded: {err_rate:.0%} errors in last {ERROR_THRESHOLD_WINDOW} tests",
-                                completed_at=datetime.now(timezone.utc),
-                                progress_completed=completed,
-                            )
-                        )
-                        await session.commit()
-                        return
-
-            # Commit batch & update progress
-            await session.commit()
-            await _update_progress(experiment_id, completed, actual_total)
+        except Exception as e:
+            logger.exception("Experiment %s execution failed at test %d: %s", experiment_id, completed, e)
+            await session.rollback()
             await session.execute(
                 update(Experiment)
                 .where(Experiment.id == experiment_id)
-                .values(progress_completed=completed)
+                .values(
+                    status="failed",
+                    error_message=f"Execution failed after {completed} tests: {e}",
+                    completed_at=datetime.now(timezone.utc),
+                    progress_completed=completed,
+                )
             )
             await session.commit()
+            return
 
         # --- 5. SAMPLE representatives ---
         tc_dicts = result_records

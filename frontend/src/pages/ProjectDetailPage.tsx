@@ -249,9 +249,22 @@ function OverviewTab({ project }: OverviewTabProps) {
 function ExperimentsTab({ projectId }: { projectId: string }) {
     const navigate = useNavigate();
     const [page, setPage] = useState(1);
-    const { list, cancel } = useExperiments(projectId, { page, page_size: 10 });
+    const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+    const { list, cancel, remove } = useExperiments(projectId, { page, page_size: 10 });
     const experiments = list.data?.items ?? [];
     const totalPages = list.data ? Math.ceil(list.data.total / list.data.page_size) : 0;
+
+    const handleDelete = (eid: string) => {
+        setDeleteTarget(eid);
+    };
+
+    const confirmDelete = () => {
+        if (deleteTarget) {
+            remove.mutate(deleteTarget, {
+                onSettled: () => setDeleteTarget(null),
+            });
+        }
+    };
 
     return (
         <Box>
@@ -295,6 +308,8 @@ function ExperimentsTab({ projectId }: { projectId: string }) {
                             projectId={projectId}
                             experiment={exp}
                             onCancel={() => cancel.mutate(exp.id)}
+                            onDelete={() => handleDelete(exp.id)}
+                            deleting={remove.isPending && deleteTarget === exp.id}
                         />
                     ))}
                 </Stack>
@@ -305,6 +320,15 @@ function ExperimentsTab({ projectId }: { projectId: string }) {
                     <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} />
                 </Box>
             )}
+
+            <ConfirmDialog
+                open={!!deleteTarget}
+                title="Delete Experiment"
+                message="Are you sure you want to delete this experiment? All test cases, results, and feedback will be permanently removed."
+                confirmLabel="Delete"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteTarget(null)}
+            />
         </Box>
     );
 }

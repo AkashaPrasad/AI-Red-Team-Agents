@@ -1,7 +1,7 @@
 """
-Projects API routes — Phase 6.2
+Projects API routes — CRUD, scope analysis, and API key management.
 
-CRUD, scope analysis, and API key management for projects.
+Projects are scoped per user — each user can only see their own projects.
 """
 
 from __future__ import annotations
@@ -14,9 +14,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
-from app.api.deps import get_current_user, require_admin
+from app.api.deps import get_current_user
 from app.api.schemas.projects import (
     ApiKeyResponse,
     ProjectCreate,
@@ -50,13 +49,6 @@ def _generate_api_key() -> tuple[str, str, str]:
 
 
 def _to_response(project: Project) -> ProjectResponse:
-    created_by = None
-    if project.created_by:
-        created_by = UserBrief(
-            id=project.created_by.id,
-            email=project.created_by.email,
-            full_name=project.created_by.full_name,
-        )
     return ProjectResponse(
         id=project.id,
         name=project.name,
@@ -67,7 +59,7 @@ def _to_response(project: Project) -> ProjectResponse:
         analyzed_scope=project.analyzed_scope,
         api_key_prefix=project.api_key_prefix,
         is_active=project.is_active,
-        created_by=created_by,
+        created_by=None,
         created_at=project.created_at,
         updated_at=project.updated_at,
     )
@@ -88,12 +80,12 @@ async def list_projects(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ProjectList:
-    """List projects in the user's organization."""
+    """List projects owned by the current user."""
     query = select(Project).where(
-        Project.organization_id == current_user.organization_id
+        Project.owner_id == current_user.id
     )
     count_query = select(func.count()).select_from(Project).where(
-        Project.organization_id == current_user.organization_id
+        Project.owner_id == current_user.id
     )
 
     if is_active is not None:
@@ -154,8 +146,7 @@ async def create_project(
     raw_key, prefix, key_hash = _generate_api_key()
 
     project = Project(
-        organization_id=current_user.organization_id,
-        created_by_id=current_user.id,
+        owner_id=current_user.id,
         name=body.name,
         description=body.description,
         business_scope=body.business_scope,
@@ -166,9 +157,6 @@ async def create_project(
     )
     session.add(project)
     await session.flush()
-
-    # Populate the relationship so _to_response doesn't trigger a lazy load
-    project.created_by = current_user
 
     await write_audit_log(
         session,
@@ -232,7 +220,7 @@ async def update_project(
 async def delete_project(
     project_id: UUID,
     request: Request,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> Response:
     project = await _get_project_or_404(project_id, current_user, session)
@@ -267,10 +255,10 @@ async def analyze_scope(
     """Use an LLM to analyze and structure the project's scope and intents."""
     project = await _get_project_or_404(project_id, current_user, session)
 
-    # Find a valid provider in org
+    # Find a valid provider owned by user
     provider_result = await session.execute(
         select(ModelProvider).where(
-            ModelProvider.organization_id == current_user.organization_id,
+            ModelProvider.owner_id == current_user.id,
             ModelProvider.is_valid == True,  # noqa: E712
         ).limit(1)
     )
@@ -320,7 +308,7 @@ async def analyze_scope(
 async def regenerate_api_key(
     project_id: UUID,
     request: Request,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ApiKeyResponse:
     """Regenerate the project's API key. Old key is invalidated immediately."""
@@ -364,10 +352,9 @@ async def _get_project_or_404(
 ) -> Project:
     result = await session.execute(
         select(Project)
-        .options(joinedload(Project.created_by))
         .where(
             Project.id == project_id,
-            Project.organization_id == user.organization_id,
+            Project.owner_id == user.id,
         )
     )
     project = result.scalar_one_or_none()

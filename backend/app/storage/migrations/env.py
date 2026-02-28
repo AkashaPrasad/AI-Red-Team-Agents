@@ -7,6 +7,7 @@ models so autogenerate can detect schema changes.
 """
 
 import asyncio
+import ssl as _ssl
 from logging.config import fileConfig
 
 from alembic import context
@@ -24,7 +25,11 @@ from app.storage.models import Base  # noqa: E402  (registers all models)
 config = context.config
 
 # Override sqlalchemy.url with our computed value (uses sync driver for DDL).
-config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+# Escape '%' → '%%' because configparser interprets % as interpolation syntax.
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.sync_database_url.replace("%", "%%"),
+)
 
 # Interpret the config file for Python logging (alembic.ini [loggers]).
 if config.config_file_name is not None:
@@ -63,14 +68,30 @@ def do_run_migrations(connection) -> None:  # noqa: ANN001
 
 async def run_async_migrations() -> None:
     """Create an async engine and run migrations."""
-    # Swap the sync URL for the async driver so we can use the async engine.
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = settings.async_database_url
+
+    # Cloud databases need explicit SSL context for asyncpg
+    _is_cloud = (
+        settings.postgres_host != "localhost"
+        and "127.0.0.1" not in settings.postgres_host
+    )
+    extra_kwargs: dict = {}
+    if _is_cloud:
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        extra_kwargs["connect_args"] = {
+            "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
+            "ssl": ctx,
+        }
 
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        **extra_kwargs,
     )
 
     async with connectable.connect() as connection:

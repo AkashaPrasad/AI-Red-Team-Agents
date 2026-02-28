@@ -16,6 +16,7 @@ import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import LoadingButton from '@mui/lab/LoadingButton';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
+import { extractApiError } from '@/utils/errors';
 import PageHeader from '@/components/common/PageHeader';
 import TypeStep from '@/components/experiments/ExperimentForm/TypeStep';
 import ConfigStep from '@/components/experiments/ExperimentForm/ConfigStep';
@@ -45,6 +46,7 @@ interface FormValues {
     auth_value: string;
     thread_endpoint_url: string;
     thread_id_path: string;
+    system_prompt: string;
 }
 
 const DEFAULT_VALUES: FormValues = {
@@ -65,6 +67,7 @@ const DEFAULT_VALUES: FormValues = {
     auth_value: '',
     thread_endpoint_url: '',
     thread_id_path: '',
+    system_prompt: '',
 };
 
 export default function CreateExperimentPage() {
@@ -140,6 +143,7 @@ export default function CreateExperimentPage() {
             auth_type: values.auth_type === 'none' ? undefined : values.auth_type,
             auth_value: values.auth_value || undefined,
             timeout_seconds: values.timeout_seconds,
+            system_prompt: values.system_prompt || undefined,
         };
 
         if (values.turn_mode === 'multi_turn') {
@@ -163,10 +167,7 @@ export default function CreateExperimentPage() {
         create.mutate(payload, {
             onSuccess: () => navigate(`/projects/${projectId}`, { state: { tab: 1 } }),
             onError: (err) => {
-                const msg =
-                    (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-                    'Failed to create experiment.';
-                setError(msg);
+                setError(extractApiError(err, 'Failed to create experiment.'));
             },
         });
     };

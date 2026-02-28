@@ -15,7 +15,6 @@ from app.storage.models.experiment import Experiment
 from app.storage.models.feedback import Feedback
 from app.storage.models.firewall_log import FirewallLog
 from app.storage.models.firewall_rule import FirewallRule
-from app.storage.models.organization import Organization
 from app.storage.models.project import Project
 from app.storage.models.provider import ModelProvider
 from app.storage.models.result import Result
@@ -30,7 +29,6 @@ __all__ = [
     "FirewallLog",
     "FirewallRule",
     "ModelProvider",
-    "Organization",
     "Project",
     "Result",
     "TestCase",

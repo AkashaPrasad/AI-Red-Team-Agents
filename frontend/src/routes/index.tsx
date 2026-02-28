@@ -14,7 +14,6 @@ const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const ProvidersPage = lazy(() => import('@/pages/ProvidersPage'));
-const OrganizationsPage = lazy(() => import('@/pages/OrganizationsPage'));
 const ChatPlaygroundPage = lazy(() => import('@/pages/ChatPlaygroundPage'));
 const ProjectDetailPage = lazy(() => import('@/pages/ProjectDetailPage'));
 const CreateExperimentPage = lazy(() => import('@/pages/CreateExperimentPage'));
@@ -69,14 +68,6 @@ export const router = createBrowserRouter([
                 element: (
                     <Loadable>
                         <ProvidersPage />
-                    </Loadable>
-                ),
-            },
-            {
-                path: '/settings/organizations',
-                element: (
-                    <Loadable>
-                        <OrganizationsPage />
                     </Loadable>
                 ),
             },

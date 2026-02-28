@@ -29,7 +29,7 @@ export interface Provider {
     model: string | null;
     api_key_preview: string;
     is_valid: boolean | null;
-    created_by: UserBrief;
+    created_by: UserBrief | null;
     created_at: string;
     updated_at: string;
 }

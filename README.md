@@ -173,8 +173,8 @@ Key variables:
 - `REDIS_URL`
 - `CELERY_BROKER_URL`
 - `CELERY_RESULT_BACKEND`
-- `SUPABASE_URL` (optional metadata/reference)
-- `SUPABASE_KEY` (optional metadata/reference)
+- `GOOGLE_OAUTH_CLIENT_ID` (backend Google token verification)
+- `VITE_GOOGLE_CLIENT_ID` (frontend Google sign-in button)
 - `SECRET_KEY`
 - `ENCRYPTION_KEY`
 - `CORS_ORIGINS`
@@ -204,7 +204,7 @@ curl http://localhost:8000/health
 Base prefix: `/api/v1`
 
 Key route groups:
-- `auth`: login, register, token refresh, current user.
+- `auth`: login, register, Google login, token refresh, current user.
 - `organizations`: organization CRUD and context switching.
 - `providers`: model provider CRUD and provider validation.
 - `projects`: project CRUD, scope analysis, API key regeneration.
@@ -220,6 +220,14 @@ Example: login
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}'
+```
+
+Example: Google login
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/google \
+  -H "Content-Type: application/json" \
+  -d '{"id_token":"<google_id_token>"}'
 ```
 
 Example: firewall evaluation
@@ -242,9 +250,9 @@ curl -X POST http://localhost:8000/api/v1/firewall/{project_id} \
 ## Troubleshooting
 
 - `Docker is required` during setup:
-  - Required only when using local Postgres/Redis containers. If `DATABASE_URL` points to Supabase and `REDIS_URL` points to Upstash (`rediss://`), setup skips local infra.
+  - Required only when using local Postgres/Redis containers. If `DATABASE_URL` points to Cloud SQL and `REDIS_URL` points to a managed Redis (`rediss://`), setup skips local infra.
 - Backend cannot connect to DB:
-  - Verify `DATABASE_URL` uses a reachable host and includes `?ssl=require` for Supabase.
+  - Verify `DATABASE_URL` uses a reachable host and URL-encodes special characters in password (e.g. `@` as `%40`).
 - Worker does not pick tasks:
   - Check Upstash/Redis availability and ensure `CELERY_BROKER_URL` matches `REDIS_URL`.
 - Frontend cannot call API:

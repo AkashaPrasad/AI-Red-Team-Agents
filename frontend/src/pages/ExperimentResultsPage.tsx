@@ -22,6 +22,7 @@ import TextField from '@mui/material/TextField';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import LinearProgress from '@mui/material/LinearProgress';
+import Alert from '@mui/material/Alert';
 import SearchIcon from '@mui/icons-material/Search';
 import InputAdornment from '@mui/material/InputAdornment';
 import PageHeader from '@/components/common/PageHeader';
@@ -63,7 +64,7 @@ export default function ExperimentResultsPage() {
 
     const project = useProject(projectId);
     const experiment = useExperiment(projectId, experimentId);
-    const dashboard = useDashboard(experimentId);
+    const dashboard = useDashboard(experimentId, experiment.data?.status);
 
     const [tab, setTab] = useState(0);
     const handleTabChange = (_: SyntheticEvent, newValue: number) => setTab(newValue);
@@ -116,15 +117,69 @@ export default function ExperimentResultsPage() {
 
             {/* Overview Tab */}
             <TabPanel value={tab} index={0}>
-                {dashboard.isLoading && (
-                    <Grid container spacing={2}>
-                        {[1, 2, 3, 4, 5].map((i) => (
-                            <Grid key={i} size={{ xs: 6, sm: 4, md: 2.4 }}>
-                                <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
-                            </Grid>
-                        ))}
-                    </Grid>
+                {/* Error banner for failed experiments */}
+                {exp.status === 'failed' && exp.error_message && (
+                    <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                            Experiment Failed
+                        </Typography>
+                        <Typography variant="body2">{exp.error_message}</Typography>
+                    </Alert>
                 )}
+
+                {/* Cancelled banner */}
+                {exp.status === 'cancelled' && (
+                    <Alert severity="warning" sx={{ mb: 3, borderRadius: 2 }}>
+                        <Typography variant="subtitle2">Experiment Cancelled</Typography>
+                    </Alert>
+                )}
+
+                {(exp.status === 'pending' || exp.status === 'running') && (
+                    <Paper sx={{ p: 3, textAlign: 'center' }}>
+                        <Typography variant="h6" color="text.secondary" gutterBottom>
+                            Results Not Available Yet
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            The experiment is currently <strong>{exp.status}</strong>.
+                            Results will appear here once the experiment completes.
+                        </Typography>
+                        {exp.status === 'running' && exp.progress && (
+                            <Box sx={{ mt: 2, maxWidth: 400, mx: 'auto' }}>
+                                <LinearProgress
+                                    variant="determinate"
+                                    value={exp.progress.percentage ?? 0}
+                                    sx={{ height: 8, borderRadius: 4 }}
+                                />
+                                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                                    {exp.progress.completed} / {exp.progress.total} tests
+                                </Typography>
+                            </Box>
+                        )}
+                    </Paper>
+                )}
+
+                {(exp.status === 'completed' || exp.status === 'failed' || exp.status === 'cancelled') &&
+                    dashboard.isLoading && (
+                        <Grid container spacing={2}>
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <Grid key={i} size={{ xs: 6, sm: 4, md: 2.4 }}>
+                                    <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
+                                </Grid>
+                            ))}
+                        </Grid>
+                    )}
+
+                {/* Show partial results info for failed/cancelled */}
+                {(exp.status === 'failed' || exp.status === 'cancelled') &&
+                    !dashboard.isLoading &&
+                    !dashboard.data && (
+                        <Paper sx={{ p: 3, textAlign: 'center', mt: 2 }}>
+                            <Typography variant="body2" color="text.secondary">
+                                No test results were recorded before the experiment {exp.status}.
+                                Check the Logs tab for any available data.
+                            </Typography>
+                        </Paper>
+                    )}
 
                 {dashboard.data && (
                     <>
@@ -220,10 +275,10 @@ function LogsTab({ experimentId }: { experimentId: string }) {
                     />
                     <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
                         <Typography variant="caption">
-                            👍 {fbSummary.vote_breakdown.up}
+                            👍 {fbSummary.vote_breakdown.thumbs_up}
                         </Typography>
                         <Typography variant="caption">
-                            👎 {fbSummary.vote_breakdown.down}
+                            👎 {fbSummary.vote_breakdown.thumbs_down}
                         </Typography>
                     </Box>
                 </Paper>

@@ -13,6 +13,7 @@ import LoadingButton from '@mui/lab/LoadingButton';
 import LoginIcon from '@mui/icons-material/Login';
 import { useAuth } from '@/hooks/useAuth';
 import type { LoginRequest } from '@/types/auth';
+import { extractApiError } from '@/utils/errors';
 
 export default function LoginPage() {
     const { login } = useAuth();
@@ -40,7 +41,7 @@ export default function LoginPage() {
 
             {login.isError && (
                 <Alert severity="error" sx={{ borderRadius: 2 }}>
-                    {(login.error as any)?.response?.data?.detail ?? 'Login failed. Please check your credentials.'}
+                    {extractApiError(login.error, 'Login failed. Please check your credentials.')}
                 </Alert>
             )}
 

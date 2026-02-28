@@ -19,7 +19,8 @@ echo "[1/7] Checking prerequisites..."
 
 command -v python3.11 >/dev/null 2>&1 || { echo "ERROR: Python 3.11 is required. Install it first."; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "ERROR: Node.js is required. Install it first."; exit 1; }
-echo "  ✓ Python 3.11 and Node.js found"
+command -v docker >/dev/null 2>&1 || { echo "ERROR: Docker is required. Install it first."; exit 1; }
+echo "  ✓ Python 3.11, Node.js, Docker found"
 
 # --- Backend virtual environment ---
 echo ""
@@ -79,62 +80,27 @@ fi
 
 # --- Start infrastructure ---
 echo ""
-echo "[6/7] Starting PostgreSQL and Redis (if local)..."
+echo "[6/7] Starting PostgreSQL and Redis..."
 
-cd "$ROOT_DIR"
-DATABASE_URL_VALUE="$(grep -E '^DATABASE_URL=' .env | tail -n 1 | cut -d '=' -f2- || true)"
-REDIS_URL_VALUE="$(grep -E '^REDIS_URL=' .env | tail -n 1 | cut -d '=' -f2- || true)"
-
-START_POSTGRES=true
-START_REDIS=true
-
-if [[ "$DATABASE_URL_VALUE" == *"supabase.co"* ]]; then
-    START_POSTGRES=false
-fi
-if [[ "$REDIS_URL_VALUE" == rediss://* || "$REDIS_URL_VALUE" == *"upstash.io"* ]]; then
-    START_REDIS=false
-fi
-
-SERVICES=()
-if [[ "$START_POSTGRES" == true ]]; then
-    SERVICES+=("postgres")
-fi
-if [[ "$START_REDIS" == true ]]; then
-    SERVICES+=("redis")
-fi
-
-if [ ${#SERVICES[@]} -gt 0 ]; then
-    command -v docker >/dev/null 2>&1 || { echo "ERROR: Docker is required for local postgres/redis setup. Install Docker or use external URLs in .env."; exit 1; }
-    cd "$ROOT_DIR/infra/docker"
-    docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d "${SERVICES[@]}"
-    echo "  ✓ Started local services: ${SERVICES[*]}"
-else
-    echo "  ✓ External PostgreSQL/Redis detected in .env, skipping local Docker services"
-fi
+cd "$ROOT_DIR/infra/docker"
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+echo "  ✓ PostgreSQL and Redis started"
 
 # --- Wait for services ---
 echo ""
 echo "[7/7] Waiting for services to be ready..."
 
-if [[ "$START_POSTGRES" == true ]]; then
-    echo "  Waiting for PostgreSQL..."
-    until docker exec art-postgres pg_isready -U postgres -q 2>/dev/null; do
-        sleep 1
-    done
-    echo "  ✓ PostgreSQL ready"
-fi
+echo "  Waiting for PostgreSQL..."
+until docker exec art-postgres pg_isready -U postgres -q 2>/dev/null; do
+    sleep 1
+done
+echo "  ✓ PostgreSQL ready"
 
-if [[ "$START_REDIS" == true ]]; then
-    echo "  Waiting for Redis..."
-    until docker exec art-redis redis-cli ping -q 2>/dev/null; do
-        sleep 1
-    done
-    echo "  ✓ Redis ready"
-fi
-
-if [[ "$START_POSTGRES" == false && "$START_REDIS" == false ]]; then
-    echo "  ✓ No local services to wait for"
-fi
+echo "  Waiting for Redis..."
+until docker exec art-redis redis-cli ping -q 2>/dev/null; do
+    sleep 1
+done
+echo "  ✓ Redis ready"
 
 # --- Done ---
 echo ""

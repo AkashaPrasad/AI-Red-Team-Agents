@@ -13,6 +13,7 @@ import LoadingButton from '@mui/lab/LoadingButton';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { useAuth } from '@/hooks/useAuth';
 import type { RegisterRequest } from '@/types/auth';
+import { extractApiError } from '@/utils/errors';
 
 export default function RegisterPage() {
     const { register: registerMut } = useAuth();
@@ -40,7 +41,7 @@ export default function RegisterPage() {
 
             {registerMut.isError && (
                 <Alert severity="error" sx={{ borderRadius: 2 }}>
-                    {(registerMut.error as any)?.response?.data?.detail ?? 'Registration failed. Please try again.'}
+                    {extractApiError(registerMut.error, 'Registration failed. Please try again.')}
                 </Alert>
             )}
 

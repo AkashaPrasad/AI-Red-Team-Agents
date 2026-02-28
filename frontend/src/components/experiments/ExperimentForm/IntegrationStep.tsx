@@ -163,6 +163,24 @@ export default function IntegrationStep() {
                 </Alert>
             )}
 
+            {/* ── System Prompt ── */}
+            <Controller
+                name="system_prompt"
+                control={control}
+                render={({ field }) => (
+                    <TextField
+                        {...field}
+                        label="System Prompt (optional)"
+                        placeholder="You are a helpful health assistant. You must only answer health-related questions..."
+                        multiline
+                        rows={4}
+                        fullWidth
+                        helperText="Define the AI persona/instructions to test against. This will be prepended as a system message to every test prompt."
+                        sx={{ '& textarea': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                    />
+                )}
+            />
+
             {/* ── Endpoint URL ── */}
             <Controller
                 name="endpoint_url"

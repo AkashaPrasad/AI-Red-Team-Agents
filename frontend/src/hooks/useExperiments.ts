@@ -51,7 +51,14 @@ export function useExperiments(projectId: string, params?: ExperimentListParams)
             queryClient.invalidateQueries({ queryKey: KEYS.all(projectId) }),
     });
 
-    return { list, create, cancel };
+    const remove = useMutation({
+        mutationFn: (eid: string) =>
+            experimentService.deleteExperiment(projectId, eid),
+        onSuccess: () =>
+            queryClient.invalidateQueries({ queryKey: KEYS.all(projectId) }),
+    });
+
+    return { list, create, cancel, remove };
 }
 
 export function useExperiment(projectId: string, experimentId: string) {

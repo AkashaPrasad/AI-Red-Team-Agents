@@ -48,7 +48,7 @@ async def _get_experiment_or_404(
         .join(Project, Experiment.project_id == Project.id)
         .where(
             Experiment.id == experiment_id,
-            Project.organization_id == user.organization_id,
+            Project.owner_id == user.id,
         )
     )
     result = await session.execute(stmt)

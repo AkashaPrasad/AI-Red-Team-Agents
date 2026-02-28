@@ -26,7 +26,6 @@ async def write_audit_log(
 ) -> None:
     """Write an immutable audit record."""
     log = AuditLog(
-        organization_id=user.organization_id if user else None,
         user_id=user.id if user else None,
         action=action,
         entity_type=entity_type,

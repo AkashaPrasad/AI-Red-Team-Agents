@@ -26,6 +26,8 @@ class TargetConfig:
     # Multi-turn
     thread_endpoint_url: str | None = None
     thread_id_path: str | None = None
+    # System prompt for the target AI
+    system_prompt: str | None = None
 
 
 @dataclass

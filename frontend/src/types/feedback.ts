@@ -29,26 +29,27 @@ export interface FeedbackSnapshot {
     created_at: string;
 }
 
-export interface VoteBreakdown {
-    up: number;
-    down: number;
+export interface CorrectionBreakdown {
+    to_pass: number;
+    to_low: number;
+    to_medium: number;
+    to_high: number;
 }
 
-export interface CorrectionBreakdown {
-    pass: number;
-    low: number;
-    medium: number;
-    high: number;
+export interface VoteBreakdown {
+    thumbs_up: number;
+    thumbs_down: number;
+    corrections: CorrectionBreakdown;
 }
 
 export interface FeedbackSummaryResponse {
     experiment_id: string;
     total_test_cases: number;
     total_with_feedback: number;
-    feedback_coverage_percent: number;
+    coverage_percentage: number;
     representative_total: number;
     representative_with_feedback: number;
-    representative_coverage_percent: number;
+    representative_coverage: number;
     vote_breakdown: VoteBreakdown;
-    correction_breakdown: CorrectionBreakdown;
+    my_feedback_count: number;
 }

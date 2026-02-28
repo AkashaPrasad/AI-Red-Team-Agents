@@ -22,7 +22,6 @@ import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import LinkIcon from '@mui/icons-material/Link';
 import PersonIcon from '@mui/icons-material/Person';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import RoleGuard from '@/components/auth/RoleGuard';
 import { formatDate } from '@/utils/formatters';
 import type { Provider } from '@/types/provider';
 
@@ -135,7 +134,7 @@ export default function ProviderCard({
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
                         <PersonIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
                         <Typography variant="caption" color="text.secondary">
-                            {provider.created_by.email} · {formatDate(provider.created_at)}
+                            {provider.created_by?.email ? `${provider.created_by.email} · ` : ''}{formatDate(provider.created_at)}
                         </Typography>
                     </Box>
                 </Box>
@@ -158,17 +157,15 @@ export default function ProviderCard({
                         <EditIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
-                <RoleGuard allowedRoles={['admin']}>
-                    <Tooltip title="Delete provider">
-                        <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => onDelete(provider)}
-                        >
-                            <DeleteIcon fontSize="small" />
-                        </IconButton>
-                    </Tooltip>
-                </RoleGuard>
+                <Tooltip title="Delete provider">
+                    <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => onDelete(provider)}
+                    >
+                        <DeleteIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
             </CardActions>
         </Card>
     );
