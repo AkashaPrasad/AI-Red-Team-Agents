@@ -29,11 +29,7 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Write-Error "Docker is required. Install it first."
-    exit 1
-}
-Write-Host "  ✓ Python, Node.js, Docker found" -ForegroundColor Green
+Write-Host "  ✓ Python and Node.js found" -ForegroundColor Green
 
 # --- Backend virtual environment ---
 Write-Host "`n[2/7] Creating Python virtual environment..." -ForegroundColor Yellow
@@ -92,33 +88,68 @@ if (-not (Test-Path ".env")) {
 Pop-Location
 
 # --- Start infrastructure ---
-Write-Host "`n[6/7] Starting PostgreSQL and Redis..." -ForegroundColor Yellow
+Write-Host "`n[6/7] Starting PostgreSQL and Redis (if local)..." -ForegroundColor Yellow
 
-Push-Location "$RootDir\infra\docker"
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
-Write-Host "  ✓ PostgreSQL and Redis started" -ForegroundColor Green
-Pop-Location
+$databaseUrl = ""
+$redisUrl = ""
+$envPath = Join-Path $RootDir ".env"
+if (Test-Path $envPath) {
+    foreach ($line in Get-Content $envPath) {
+        if ($line.StartsWith("DATABASE_URL=")) { $databaseUrl = $line.Substring("DATABASE_URL=".Length) }
+        if ($line.StartsWith("REDIS_URL=")) { $redisUrl = $line.Substring("REDIS_URL=".Length) }
+    }
+}
+
+$startPostgres = $true
+$startRedis = $true
+if ($databaseUrl -match "supabase\.co") { $startPostgres = $false }
+if ($redisUrl -match "^rediss://" -or $redisUrl -match "upstash\.io") { $startRedis = $false }
+
+$services = @()
+if ($startPostgres) { $services += "postgres" }
+if ($startRedis) { $services += "redis" }
+
+if ($services.Count -gt 0) {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Error "Docker is required for local postgres/redis setup. Install Docker or use external URLs in .env."
+        exit 1
+    }
+    Push-Location "$RootDir\infra\docker"
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d $services
+    Write-Host "  ✓ Started local services: $($services -join ', ')" -ForegroundColor Green
+    Pop-Location
+} else {
+    Write-Host "  ✓ External PostgreSQL/Redis detected in .env, skipping local Docker services" -ForegroundColor Green
+}
 
 # --- Wait for services ---
 Write-Host "`n[7/7] Waiting for services to be ready..." -ForegroundColor Yellow
 
-Write-Host "  Waiting for PostgreSQL..."
-$retries = 0
-do {
-    Start-Sleep -Seconds 1
-    $retries++
-    $ready = docker exec art-postgres pg_isready -U postgres 2>$null
-} while ($LASTEXITCODE -ne 0 -and $retries -lt 30)
-Write-Host "  ✓ PostgreSQL ready" -ForegroundColor Green
+if ($startPostgres) {
+    Write-Host "  Waiting for PostgreSQL..."
+    $retries = 0
+    do {
+        Start-Sleep -Seconds 1
+        $retries++
+        $ready = docker exec art-postgres pg_isready -U postgres 2>$null
+    } while ($LASTEXITCODE -ne 0 -and $retries -lt 30)
+    Write-Host "  ✓ PostgreSQL ready" -ForegroundColor Green
+}
 
-Write-Host "  Waiting for Redis..."
-$retries = 0
-do {
-    Start-Sleep -Seconds 1
-    $retries++
-    docker exec art-redis redis-cli ping 2>$null | Out-Null
-} while ($LASTEXITCODE -ne 0 -and $retries -lt 30)
-Write-Host "  ✓ Redis ready" -ForegroundColor Green
+if ($startRedis) {
+    Write-Host "  Waiting for Redis..."
+    $retries = 0
+    do {
+        Start-Sleep -Seconds 1
+        $retries++
+        docker exec art-redis redis-cli ping 2>$null | Out-Null
+    } while ($LASTEXITCODE -ne 0 -and $retries -lt 30)
+    Write-Host "  ✓ Redis ready" -ForegroundColor Green
+}
+
+if (-not $startPostgres -and -not $startRedis) {
+    Write-Host "  ✓ No local services to wait for" -ForegroundColor Green
+}
 
 # --- Done ---
 Write-Host "`n============================================" -ForegroundColor Cyan

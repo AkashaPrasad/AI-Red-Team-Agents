@@ -173,6 +173,8 @@ Key variables:
 - `REDIS_URL`
 - `CELERY_BROKER_URL`
 - `CELERY_RESULT_BACKEND`
+- `SUPABASE_URL` (optional metadata/reference)
+- `SUPABASE_KEY` (optional metadata/reference)
 - `SECRET_KEY`
 - `ENCRYPTION_KEY`
 - `CORS_ORIGINS`
@@ -240,11 +242,11 @@ curl -X POST http://localhost:8000/api/v1/firewall/{project_id} \
 ## Troubleshooting
 
 - `Docker is required` during setup:
-  - Install Docker, or run local Postgres/Redis services manually and configure `.env`.
+  - Required only when using local Postgres/Redis containers. If `DATABASE_URL` points to Supabase and `REDIS_URL` points to Upstash (`rediss://`), setup skips local infra.
 - Backend cannot connect to DB:
-  - Verify `DATABASE_URL` and that `ai_red_team` database exists.
+  - Verify `DATABASE_URL` uses a reachable host and includes `?ssl=require` for Supabase.
 - Worker does not pick tasks:
-  - Check Redis availability and `CELERY_BROKER_URL`.
+  - Check Upstash/Redis availability and ensure `CELERY_BROKER_URL` matches `REDIS_URL`.
 - Frontend cannot call API:
   - Verify backend is on `:8000` and frontend proxy config in `frontend/vite.config.ts`.
 

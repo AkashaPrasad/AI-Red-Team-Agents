@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "changeme"
     database_url: str | None = None
+    supabase_url: str | None = None
+    supabase_key: str | None = None
 
     # --- Redis ---
     redis_host: str = "localhost"
@@ -86,6 +88,24 @@ class Settings(BaseSettings):
     def async_database_url(self) -> str:
         """Construct async database URL from components if not explicitly set."""
         if self.database_url:
+            if self.database_url.startswith("postgresql+psycopg2://"):
+                return self.database_url.replace(
+                    "postgresql+psycopg2://",
+                    "postgresql+asyncpg://",
+                    1,
+                )
+            if self.database_url.startswith("postgresql://"):
+                return self.database_url.replace(
+                    "postgresql://",
+                    "postgresql+asyncpg://",
+                    1,
+                )
+            if self.database_url.startswith("postgres://"):
+                return self.database_url.replace(
+                    "postgres://",
+                    "postgresql+asyncpg://",
+                    1,
+                )
             return self.database_url
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
@@ -95,6 +115,26 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         """Sync database URL for Alembic migrations."""
+        if self.database_url:
+            if self.database_url.startswith("postgresql+asyncpg://"):
+                return self.database_url.replace(
+                    "postgresql+asyncpg://",
+                    "postgresql+psycopg2://",
+                    1,
+                )
+            if self.database_url.startswith("postgresql://"):
+                return self.database_url.replace(
+                    "postgresql://",
+                    "postgresql+psycopg2://",
+                    1,
+                )
+            if self.database_url.startswith("postgres://"):
+                return self.database_url.replace(
+                    "postgres://",
+                    "postgresql+psycopg2://",
+                    1,
+                )
+            return self.database_url
         return (
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
