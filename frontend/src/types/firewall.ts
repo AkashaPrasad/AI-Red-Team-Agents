@@ -2,10 +2,7 @@
 // Firewall types (matches backend schemas/firewall.py)
 // ---------------------------------------------------------------------------
 
-import type { CursorPaginatedResponse } from './api';
-
 export type FirewallRuleType = 'block_pattern' | 'allow_pattern' | 'custom_policy';
-export type FirewallVerdictStatus = 'passed' | 'blocked';
 
 export interface FirewallEvalRequest {
     prompt: string;
@@ -30,10 +27,10 @@ export interface FirewallRuleUpdate {
 }
 
 export interface FirewallVerdictResponse {
-    status: FirewallVerdictStatus;
+    status: boolean;
     fail_category: string | null;
-    explanation: string | null;
-    confidence: number | null;
+    explanation: string;
+    confidence: number;
     matched_rule: string | null;
 }
 
@@ -56,8 +53,8 @@ export interface FirewallRuleList {
 
 export interface FirewallLogEntry {
     id: string;
-    prompt_preview: string;
-    verdict_status: FirewallVerdictStatus;
+    prompt_preview: string | null;
+    verdict_status: boolean;
     fail_category: string | null;
     confidence: number | null;
     matched_rule_name: string | null;
@@ -66,7 +63,12 @@ export interface FirewallLogEntry {
     created_at: string;
 }
 
-export type FirewallLogList = CursorPaginatedResponse<FirewallLogEntry>;
+export interface FirewallLogList {
+    items: FirewallLogEntry[];
+    total: number;
+    cursor: string | null;
+    page_size: number;
+}
 
 export interface DailyStats {
     date: string;
@@ -90,10 +92,8 @@ export interface FirewallStatsResponse {
 export interface FirewallIntegrationResponse {
     endpoint_url: string;
     api_key_prefix: string;
-    rate_limit: string;
-    snippets: {
-        python: string;
-        javascript: string;
-        curl: string;
-    };
+    rate_limit: number;
+    python_snippet: string;
+    javascript_snippet: string;
+    curl_snippet: string;
 }

@@ -125,6 +125,7 @@ async def _load_context(
         provider_type=provider.provider_type,
         api_key=decrypt_value(provider.encrypted_api_key),
         endpoint_url=provider.endpoint_url,
+        model=provider.model,
     )
 
     total_tests = TESTING_LEVEL_COUNTS.get(experiment.testing_level, 500)
@@ -229,11 +230,13 @@ async def run_experiment_async(experiment_id: UUID) -> None:
         await _update_progress(experiment_id, 0, ctx.total_tests)
 
         # Build LLM gateway (provider.api_key is already decrypted)
+        # Let LLMGateway.model pick a provider-appropriate default when no
+        # explicit model is stored on the provider (e.g. Groq → llama-3.3-70b).
         gateway = LLMGateway(
             provider_type=ctx.provider.provider_type,
             api_key=ctx.provider.api_key,
             endpoint_url=ctx.provider.endpoint_url,
-            model=settings.llm_judge_model,
+            model=ctx.provider.model,
         )
 
         # Validate provider credentials
@@ -343,6 +346,7 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                 batch = all_prompts[batch_start : batch_start + BATCH_SIZE]
 
                 for gp in batch:
+                  try:
                     # Execute against target
                     if gp.conversation_plan and ctx.turn_mode == "multi_turn":
                         # Multi-turn execution
@@ -427,6 +431,49 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                             )
                             await session.commit()
                             return
+
+                  except Exception as tc_exc:
+                    # Individual test-case failure — log and record as error
+                    logger.warning(
+                        "Test case %d failed for experiment %s: %s",
+                        gp.sequence_order, experiment_id, tc_exc,
+                    )
+                    tc = TestCase(
+                        experiment_id=experiment_id,
+                        prompt=gp.prompt_text,
+                        response=None,
+                        conversation=None,
+                        risk_category=gp.risk_category,
+                        data_strategy=gp.data_strategy,
+                        attack_converter=gp.converter_applied,
+                        sequence_order=gp.sequence_order,
+                        is_representative=False,
+                        latency_ms=0,
+                    )
+                    session.add(tc)
+                    await session.flush()
+                    res = Result(
+                        test_case_id=tc.id,
+                        result="error",
+                        severity=None,
+                        confidence=0.0,
+                        explanation=f"Test execution error: {tc_exc}",
+                        owasp_mapping=gp.owasp_id,
+                    )
+                    session.add(res)
+                    result_records.append({
+                        "id": tc.id,
+                        "status": "error",
+                        "severity": None,
+                        "risk_category": gp.risk_category,
+                        "owasp_mapping": gp.owasp_id,
+                        "confidence": 0.0,
+                        "latency_ms": 0,
+                    })
+                    completed += 1
+                    recent_window.append(True)
+                    if len(recent_window) > ERROR_THRESHOLD_WINDOW:
+                        recent_window.pop(0)
 
                 # Commit batch & update progress
                 await session.commit()

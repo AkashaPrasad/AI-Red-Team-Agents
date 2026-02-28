@@ -31,7 +31,7 @@ export interface Project {
     analyzed_scope: Record<string, unknown> | null;
     api_key_prefix: string | null;
     is_active: boolean;
-    created_by: UserBrief;
+    created_by: UserBrief | null;
     created_at: string;
     updated_at: string;
 }
@@ -42,7 +42,6 @@ export interface ProjectSummary {
     description: string | null;
     is_active: boolean;
     experiment_count: number;
-    created_by: UserBrief;
     created_at: string;
     updated_at: string;
 }
@@ -51,11 +50,11 @@ export type ProjectList = PaginatedResponse<ProjectSummary>;
 
 export interface ApiKeyResponse {
     api_key: string;
-    prefix: string;
+    api_key_prefix: string;
     message: string;
 }
 
 export interface ScopeAnalysisResponse {
-    analysis: Record<string, unknown>;
-    suggestions: string[];
+    analyzed_scope: Record<string, unknown>;
+    message: string;
 }

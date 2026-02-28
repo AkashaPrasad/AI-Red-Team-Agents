@@ -10,8 +10,8 @@ export type ExperimentSubType =
     | 'owasp_llm_top10'
     | 'owasp_agentic'
     | 'adaptive'
-    | 'happy_path'
-    | 'edge_cases'
+    | 'user_interaction'
+    | 'functional'
     | 'scope_validation';
 
 export type TurnMode = 'single_turn' | 'multi_turn';
@@ -56,7 +56,8 @@ export interface ExperimentAnalytics {
     failed: number;
     errors: number;
     pass_rate: number;
-    error_rate: number;
+    severity_breakdown: Record<string, number>;
+    category_breakdown: Record<string, unknown>[];
 }
 
 export interface Experiment {
@@ -97,8 +98,10 @@ export interface ExperimentSummary {
 export type ExperimentList = PaginatedResponse<ExperimentSummary>;
 
 export interface ExperimentStatusResponse {
+    id: string;
     status: ExperimentStatus;
     progress: ExperimentProgress | null;
-    analytics: ExperimentAnalytics | null;
     error_message: string | null;
+    started_at: string | null;
+    completed_at: string | null;
 }

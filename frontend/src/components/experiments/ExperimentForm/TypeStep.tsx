@@ -25,8 +25,8 @@ const ADVERSARIAL_SUBTYPES: ExperimentSubType[] = [
 ];
 
 const BEHAVIOURAL_SUBTYPES: ExperimentSubType[] = [
-    'happy_path',
-    'edge_cases',
+    'user_interaction',
+    'functional',
     'scope_validation',
 ];
 
@@ -46,7 +46,7 @@ export default function TypeStep() {
     const handleTypeChange = (type: ExperimentType) => {
         setValue('experiment_type', type);
         // Reset sub_type to the first option when type changes
-        const firstSub = type === 'adversarial' ? 'owasp_llm_top10' : 'happy_path';
+        const firstSub = type === 'adversarial' ? 'owasp_llm_top10' : 'user_interaction';
         setValue('sub_type', firstSub);
     };
 

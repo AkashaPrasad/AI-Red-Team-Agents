@@ -11,6 +11,10 @@ export interface User {
     updated_at: string;
 }
 
+export interface GoogleLoginRequest {
+    id_token: string;
+}
+
 export interface LoginRequest {
     email: string;
     password: string;

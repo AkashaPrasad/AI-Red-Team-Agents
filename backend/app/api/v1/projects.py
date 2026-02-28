@@ -14,6 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.api.deps import get_current_user
 from app.api.schemas.projects import (
@@ -48,7 +49,11 @@ def _generate_api_key() -> tuple[str, str, str]:
     return raw_key, prefix, key_hash
 
 
-def _to_response(project: Project) -> ProjectResponse:
+def _to_response(project: Project, user: User | None = None) -> ProjectResponse:
+    created_by = None
+    owner = user or getattr(project, "owner", None)
+    if owner:
+        created_by = UserBrief(id=owner.id, email=owner.email, full_name=owner.full_name)
     return ProjectResponse(
         id=project.id,
         name=project.name,
@@ -59,7 +64,7 @@ def _to_response(project: Project) -> ProjectResponse:
         analyzed_scope=project.analyzed_scope,
         api_key_prefix=project.api_key_prefix,
         is_active=project.is_active,
-        created_by=None,
+        created_by=created_by,
         created_at=project.created_at,
         updated_at=project.updated_at,
     )
@@ -132,7 +137,7 @@ async def get_project(
     session: AsyncSession = Depends(get_async_session),
 ) -> ProjectResponse:
     project = await _get_project_or_404(project_id, current_user, session)
-    return _to_response(project)
+    return _to_response(project, current_user)
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -167,7 +172,7 @@ async def create_project(
         ip_address=request.client.host if request.client else None,
     )
 
-    resp = _to_response(project)
+    resp = _to_response(project, current_user)
     return resp
 
 
@@ -213,7 +218,7 @@ async def update_project(
         ip_address=request.client.host if request.client else None,
     )
 
-    return _to_response(project)
+    return _to_response(project, current_user)
 
 
 @router.delete("/{project_id}", responses={204: {"description": "Project deleted"}})

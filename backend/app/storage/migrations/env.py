@@ -9,6 +9,7 @@ models so autogenerate can detect schema changes.
 import asyncio
 import ssl as _ssl
 from logging.config import fileConfig
+from urllib.parse import urlsplit
 
 from alembic import context
 from sqlalchemy import pool
@@ -72,10 +73,8 @@ async def run_async_migrations() -> None:
     configuration["sqlalchemy.url"] = settings.async_database_url
 
     # Cloud databases need explicit SSL context for asyncpg
-    _is_cloud = (
-        settings.postgres_host != "localhost"
-        and "127.0.0.1" not in settings.postgres_host
-    )
+    _db_host = urlsplit(settings.async_database_url).hostname or settings.postgres_host
+    _is_cloud = _db_host not in {"localhost", "127.0.0.1", ""}
     extra_kwargs: dict = {}
     if _is_cloud:
         ctx = _ssl.create_default_context()

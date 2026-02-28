@@ -1,23 +1,26 @@
 // ---------------------------------------------------------------------------
-// LoginPage — email + password login form
+// LoginPage — email/password + Google sign-in
 // ---------------------------------------------------------------------------
 
+import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
+import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
 import LoadingButton from '@mui/lab/LoadingButton';
 import LoginIcon from '@mui/icons-material/Login';
+import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { useAuth } from '@/hooks/useAuth';
 import type { LoginRequest } from '@/types/auth';
 import { extractApiError } from '@/utils/errors';
 
 export default function LoginPage() {
-    const { login } = useAuth();
-
+    const { login, googleLogin } = useAuth();
+    const [googleUiError, setGoogleUiError] = useState<string | null>(null);
     const {
         control,
         handleSubmit,
@@ -25,6 +28,15 @@ export default function LoginPage() {
     } = useForm<LoginRequest>({
         defaultValues: { email: '', password: '' },
     });
+
+    const onGoogleSuccess = (response: CredentialResponse) => {
+        if (!response.credential) {
+            setGoogleUiError('Google did not return a sign-in credential. Please try again.');
+            return;
+        }
+        setGoogleUiError(null);
+        googleLogin.mutate({ id_token: response.credential });
+    };
 
     const onSubmit = (data: LoginRequest) => {
         login.mutate(data);
@@ -36,12 +48,12 @@ export default function LoginPage() {
                 Welcome back
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 1 }}>
-                Enter your credentials to access your account
+                Sign in with email/password or continue with Google
             </Typography>
 
-            {login.isError && (
+            {(login.isError || googleUiError || googleLogin.isError) && (
                 <Alert severity="error" sx={{ borderRadius: 2 }}>
-                    {extractApiError(login.error, 'Login failed. Please check your credentials.')}
+                    {extractApiError(login.error ?? googleLogin.error, googleUiError ?? 'Login failed. Please try again.')}
                 </Alert>
             )}
 
@@ -102,6 +114,20 @@ export default function LoginPage() {
             >
                 Sign In
             </LoadingButton>
+
+            <Divider>OR</Divider>
+
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                <GoogleLogin
+                    onSuccess={onGoogleSuccess}
+                    onError={() => setGoogleUiError('Google sign-in was cancelled or failed.')}
+                    useOneTap
+                    size="large"
+                    shape="pill"
+                    theme="outline"
+                    text="signin_with"
+                />
+            </Box>
 
             <Typography variant="body2" sx={{ textAlign: 'center', mt: 1 }}>
                 Don&apos;t have an account?{' '}

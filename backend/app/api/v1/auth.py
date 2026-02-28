@@ -1,12 +1,15 @@
 """
-Auth router — login, register, refresh, me.
+Auth router — email/password + Google login, refresh, me.
 """
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from google.auth.transport.requests import Request as GoogleTransportRequest
+from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +31,10 @@ router = APIRouter(prefix="/auth")
 # ---------------------------------------------------------------------------
 # Request / Response schemas
 # ---------------------------------------------------------------------------
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(min_length=20)
 
 
 class LoginRequest(BaseModel):
@@ -86,6 +93,29 @@ def _build_tokens(user: User) -> TokenResponse:
     )
 
 
+async def _create_user(
+    session: AsyncSession,
+    *,
+    email: str,
+    hashed_password: str,
+    full_name: str | None,
+    auth_provider: str = "local",
+    google_sub: str | None = None,
+) -> User:
+    """Create a new user."""
+    user = User(
+        email=email,
+        hashed_password=hashed_password,
+        full_name=full_name,
+        role="user",
+        auth_provider=auth_provider,
+        google_sub=google_sub,
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -98,7 +128,8 @@ async def login(
     session: AsyncSession = Depends(get_async_session),
 ):
     """Authenticate with email + password, return JWT pair."""
-    result = await session.execute(select(User).where(User.email == body.email))
+    email = body.email.strip().lower()
+    result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(body.password, user.hashed_password):
@@ -113,7 +144,6 @@ async def login(
             detail="Account is deactivated",
         )
 
-    # Update last login
     user.last_login_at = datetime.now(timezone.utc)
     await session.flush()
 
@@ -135,27 +165,104 @@ async def register(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Create a new user account, return JWT pair."""
-    # Check for duplicate email
-    existing = await session.execute(select(User).where(User.email == body.email))
+    """Create a new user account with email/password, return JWT pair."""
+    email = body.email.strip().lower()
+    existing = await session.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
         )
 
-    user = User(
-        email=body.email,
+    user = await _create_user(
+        session,
+        email=email,
         hashed_password=hash_password(body.password),
-        full_name=body.full_name,
+        full_name=body.full_name.strip(),
+        auth_provider="local",
     )
-    session.add(user)
-    await session.flush()
 
     await write_audit_log(
         session,
         user=user,
         action="user.registered",
+        entity_type="user",
+        entity_id=user.id,
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return _build_tokens(user)
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(
+    body: GoogleLoginRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Authenticate with Google ID token, return JWT pair."""
+    if not settings.google_oauth_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Google OAuth is not configured",
+        )
+
+    try:
+        token_payload = google_id_token.verify_oauth2_token(
+            body.id_token,
+            GoogleTransportRequest(),
+            settings.google_oauth_client_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google token",
+        ) from exc
+
+    issuer = str(token_payload.get("iss", ""))
+    if issuer not in {"accounts.google.com", "https://accounts.google.com"}:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google token issuer",
+        )
+
+    email = str(token_payload.get("email", "")).strip().lower()
+    is_email_verified = bool(token_payload.get("email_verified", False))
+    if not email or not is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Google account email is not verified",
+        )
+
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        user = await _create_user(
+            session,
+            email=email,
+            # Keep local-password auth disabled by storing random non-user password.
+            hashed_password=hash_password(secrets.token_urlsafe(48)),
+            full_name=str(token_payload.get("name", "")).strip() or None,
+            auth_provider="google",
+            google_sub=str(token_payload.get("sub", "")).strip() or None,
+        )
+    elif not user.full_name and token_payload.get("name"):
+        user.full_name = str(token_payload.get("name")).strip()
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated",
+        )
+
+    user.last_login_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    await write_audit_log(
+        session,
+        user=user,
+        action="user.login.google",
         entity_type="user",
         entity_id=user.id,
         ip_address=request.client.host if request.client else None,

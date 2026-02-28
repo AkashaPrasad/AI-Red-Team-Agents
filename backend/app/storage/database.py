@@ -10,6 +10,7 @@ Provides:
 
 import ssl as _ssl
 from collections.abc import AsyncGenerator
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -25,10 +26,8 @@ from app.config import settings
 # Neon / Supabase poolers use PgBouncer which doesn't support prepared
 # statements.  Detect cloud hosts and disable the asyncpg statement cache.
 # They also require TLS with an explicit SSLContext for asyncpg.
-_is_cloud_pg = (
-    settings.postgres_host != "localhost"
-    and "127.0.0.1" not in settings.postgres_host
-)
+_db_host = urlsplit(settings.async_database_url).hostname or settings.postgres_host
+_is_cloud_pg = _db_host not in {"localhost", "127.0.0.1", ""}
 
 _cloud_connect_args: dict = {}
 if _is_cloud_pg:

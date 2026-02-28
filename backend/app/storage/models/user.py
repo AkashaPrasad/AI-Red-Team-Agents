@@ -19,10 +19,13 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    role: Mapped[str] = mapped_column(String(50), nullable=False, default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    auth_provider: Mapped[str] = mapped_column(String(50), nullable=False, default="local")
+    google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # --- Relationships ---
     projects: Mapped[list["Project"]] = relationship(  # noqa: F821

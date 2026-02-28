@@ -1,12 +1,13 @@
 // ---------------------------------------------------------------------------
-// useAuth — login / register mutations, user query
+// useAuth — login/register/Google login mutations + current user query
 // ---------------------------------------------------------------------------
 
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '@/services/authService';
 import { useAuthStore } from '@/store/authStore';
-import type { LoginRequest, RegisterRequest } from '@/types/auth';
+import type { GoogleLoginRequest, LoginRequest, RegisterRequest } from '@/types/auth';
 
 export function useAuth() {
     const queryClient = useQueryClient();
@@ -21,10 +22,11 @@ export function useAuth() {
         staleTime: 5 * 60 * 1000,
     });
 
-    // Keep store in sync with fetched user
-    if (userQuery.data && !useAuthStore.getState().user) {
-        setUser(userQuery.data);
-    }
+    useEffect(() => {
+        if (userQuery.data && !useAuthStore.getState().user) {
+            setUser(userQuery.data);
+        }
+    }, [userQuery.data, setUser]);
 
     const loginMutation = useMutation({
         mutationFn: (data: LoginRequest) => authService.login(data),
@@ -48,6 +50,17 @@ export function useAuth() {
         },
     });
 
+    const googleLoginMutation = useMutation({
+        mutationFn: (data: GoogleLoginRequest) => authService.googleLogin(data),
+        onSuccess: async (tokens) => {
+            setTokens(tokens.access_token, tokens.refresh_token);
+            const user = await authService.getMe();
+            setUser(user);
+            queryClient.setQueryData(['auth', 'me'], user);
+            navigate('/');
+        },
+    });
+
     const logout = () => {
         clearAuth();
         queryClient.clear();
@@ -60,6 +73,7 @@ export function useAuth() {
         isLoading: userQuery.isLoading,
         login: loginMutation,
         register: registerMutation,
+        googleLogin: googleLoginMutation,
         logout,
     };
 }
