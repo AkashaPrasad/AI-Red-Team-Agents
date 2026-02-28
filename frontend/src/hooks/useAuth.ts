@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// useAuth — login / register mutations, user query
+// useAuth — login, register, Google OAuth mutations, user query
 // ---------------------------------------------------------------------------
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '@/services/authService';
 import { useAuthStore } from '@/store/authStore';
-import type { LoginRequest, RegisterRequest } from '@/types/auth';
+import type { LoginRequest, RegisterRequest, GoogleAuthRequest } from '@/types/auth';
 
 export function useAuth() {
     const queryClient = useQueryClient();
@@ -26,26 +26,27 @@ export function useAuth() {
         setUser(userQuery.data);
     }
 
+    const handleTokenSuccess = async (tokens: { access_token: string; refresh_token: string }) => {
+        setTokens(tokens.access_token, tokens.refresh_token);
+        const user = await authService.getMe();
+        setUser(user);
+        queryClient.setQueryData(['auth', 'me'], user);
+        navigate('/');
+    };
+
     const loginMutation = useMutation({
         mutationFn: (data: LoginRequest) => authService.login(data),
-        onSuccess: async (tokens) => {
-            setTokens(tokens.access_token, tokens.refresh_token);
-            const user = await authService.getMe();
-            setUser(user);
-            queryClient.setQueryData(['auth', 'me'], user);
-            navigate('/');
-        },
+        onSuccess: handleTokenSuccess,
     });
 
     const registerMutation = useMutation({
         mutationFn: (data: RegisterRequest) => authService.register(data),
-        onSuccess: async (tokens) => {
-            setTokens(tokens.access_token, tokens.refresh_token);
-            const user = await authService.getMe();
-            setUser(user);
-            queryClient.setQueryData(['auth', 'me'], user);
-            navigate('/');
-        },
+        onSuccess: handleTokenSuccess,
+    });
+
+    const googleLoginMutation = useMutation({
+        mutationFn: (data: GoogleAuthRequest) => authService.googleAuth(data),
+        onSuccess: handleTokenSuccess,
     });
 
     const logout = () => {
@@ -60,6 +61,7 @@ export function useAuth() {
         isLoading: userQuery.isLoading,
         login: loginMutation,
         register: registerMutation,
+        googleLogin: googleLoginMutation,
         logout,
     };
 }

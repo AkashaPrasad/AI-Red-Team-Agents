@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// RegisterPage — name + email + password registration form
+// RegisterPage — email/password + Google OAuth registration
 // ---------------------------------------------------------------------------
 
 import { useForm, Controller } from 'react-hook-form';
@@ -9,14 +9,16 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
 import Alert from '@mui/material/Alert';
+import Divider from '@mui/material/Divider';
 import LoadingButton from '@mui/lab/LoadingButton';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { useAuth } from '@/hooks/useAuth';
 import type { RegisterRequest } from '@/types/auth';
 import { extractApiError } from '@/utils/errors';
 
 export default function RegisterPage() {
-    const { register: registerMut } = useAuth();
+    const { register: registerMut, googleLogin } = useAuth();
 
     const {
         control,
@@ -30,6 +32,14 @@ export default function RegisterPage() {
         registerMut.mutate(data);
     };
 
+    const handleGoogleSuccess = (response: CredentialResponse) => {
+        if (response.credential) {
+            googleLogin.mutate({ credential: response.credential });
+        }
+    };
+
+    const error = registerMut.isError ? registerMut.error : googleLogin.isError ? googleLogin.error : null;
+
     return (
         <Box component="form" onSubmit={handleSubmit(onSubmit)} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <Typography variant="h5" sx={{ fontWeight: 700, textAlign: 'center', mb: 0.5 }}>
@@ -39,12 +49,28 @@ export default function RegisterPage() {
                 Start securing your AI systems today
             </Typography>
 
-            {registerMut.isError && (
+            {error && (
                 <Alert severity="error" sx={{ borderRadius: 2 }}>
-                    {extractApiError(registerMut.error, 'Registration failed. Please try again.')}
+                    {extractApiError(error, 'Registration failed. Please try again.')}
                 </Alert>
             )}
 
+            {/* Google Sign-Up */}
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => console.error('Google Login Failed')}
+                    size="large"
+                    width="350"
+                    text="signup_with"
+                    shape="rectangular"
+                    theme="outline"
+                />
+            </Box>
+
+            <Divider sx={{ my: 0.5 }}>or</Divider>
+
+            {/* Name / Email / Password */}
             <Controller
                 name="full_name"
                 control={control}
@@ -54,7 +80,6 @@ export default function RegisterPage() {
                         {...field}
                         label="Full Name"
                         autoComplete="name"
-                        autoFocus
                         error={!!errors.full_name}
                         helperText={errors.full_name?.message}
                         fullWidth
@@ -107,7 +132,7 @@ export default function RegisterPage() {
                 variant="contained"
                 size="large"
                 fullWidth
-                loading={registerMut.isPending}
+                loading={registerMut.isPending || googleLogin.isPending}
                 startIcon={<PersonAddIcon />}
                 sx={{
                     py: 1.4,

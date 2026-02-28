@@ -22,6 +22,10 @@ export interface RegisterRequest {
     full_name: string;
 }
 
+export interface GoogleAuthRequest {
+    credential: string;
+}
+
 export interface TokenResponse {
     access_token: string;
     refresh_token: string;

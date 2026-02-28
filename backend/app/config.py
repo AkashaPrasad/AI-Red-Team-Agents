@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
     jwt_algorithm: str = "HS256"
 
+    # --- Google OAuth ---
+    google_client_id: str = "524704483090-hm6hjicmrhh5flr9c28kr1tdelba7tbf.apps.googleusercontent.com"
+
     # --- Rate Limiting ---
     firewall_rate_limit_per_minute: int = 100
     api_rate_limit_per_minute: int = 60

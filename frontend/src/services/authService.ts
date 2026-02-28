@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Auth service — login, register, refresh, getMe
+// Auth service — login, register, Google OAuth, refresh, getMe
 // ---------------------------------------------------------------------------
 
 import api from './api';
-import type { LoginRequest, RegisterRequest, TokenResponse, User } from '@/types/auth';
+import type { LoginRequest, RegisterRequest, GoogleAuthRequest, TokenResponse, User } from '@/types/auth';
 
 export const authService = {
     async login(data: LoginRequest): Promise<TokenResponse> {
@@ -13,6 +13,11 @@ export const authService = {
 
     async register(data: RegisterRequest): Promise<TokenResponse> {
         const res = await api.post<TokenResponse>('/auth/register', data);
+        return res.data;
+    },
+
+    async googleAuth(data: GoogleAuthRequest): Promise<TokenResponse> {
+        const res = await api.post<TokenResponse>('/auth/google', data);
         return res.data;
     },
 

@@ -1,5 +1,5 @@
 """
-Auth router — login, register, refresh, me.
+Auth router — login, register, Google OAuth, refresh, me.
 """
 
 from __future__ import annotations
@@ -7,6 +7,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +41,10 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=1, max_length=200)
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str  # Google ID token from frontend
 
 
 class TokenResponse(BaseModel):
@@ -101,7 +107,7 @@ async def login(
     result = await session.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(body.password, user.hashed_password):
+    if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -113,7 +119,6 @@ async def login(
             detail="Account is deactivated",
         )
 
-    # Update last login
     user.last_login_at = datetime.now(timezone.utc)
     await session.flush()
 
@@ -136,7 +141,6 @@ async def register(
     session: AsyncSession = Depends(get_async_session),
 ):
     """Create a new user account, return JWT pair."""
-    # Check for duplicate email
     existing = await session.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -148,6 +152,7 @@ async def register(
         email=body.email,
         hashed_password=hash_password(body.password),
         full_name=body.full_name,
+        is_active=True,
     )
     session.add(user)
     await session.flush()
@@ -156,6 +161,83 @@ async def register(
         session,
         user=user,
         action="user.registered",
+        entity_type="user",
+        entity_id=user.id,
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return _build_tokens(user)
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_auth(
+    body: GoogleAuthRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Authenticate via Google OAuth. Creates account on first login."""
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            body.credential,
+            google_requests.Request(),
+            settings.google_client_id,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google token",
+        )
+
+    google_id = idinfo["sub"]
+    email = idinfo.get("email")
+    full_name = idinfo.get("name", "")
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google account has no email",
+        )
+
+    # Look up by google_id first, then by email
+    result = await session.execute(
+        select(User).where(User.google_id == google_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Check if a user with this email exists (link accounts)
+        result = await session.execute(
+            select(User).where(User.email == email)
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            user.google_id = google_id
+            if not user.full_name and full_name:
+                user.full_name = full_name
+        else:
+            # Create new user
+            user = User(
+                email=email,
+                full_name=full_name,
+                google_id=google_id,
+                hashed_password=None,
+                is_active=True,
+            )
+            session.add(user)
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated",
+        )
+
+    user.last_login_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    await write_audit_log(
+        session,
+        user=user,
+        action="user.google_login",
         entity_type="user",
         entity_id=user.id,
         ip_address=request.client.host if request.client else None,

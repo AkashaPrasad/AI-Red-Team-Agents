@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// LoginPage — email + password login form
+// LoginPage — email/password + Google OAuth Sign-In
 // ---------------------------------------------------------------------------
 
 import { useForm, Controller } from 'react-hook-form';
@@ -9,14 +9,16 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
 import Alert from '@mui/material/Alert';
+import Divider from '@mui/material/Divider';
 import LoadingButton from '@mui/lab/LoadingButton';
 import LoginIcon from '@mui/icons-material/Login';
+import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { useAuth } from '@/hooks/useAuth';
 import type { LoginRequest } from '@/types/auth';
 import { extractApiError } from '@/utils/errors';
 
 export default function LoginPage() {
-    const { login } = useAuth();
+    const { login, googleLogin } = useAuth();
 
     const {
         control,
@@ -30,21 +32,45 @@ export default function LoginPage() {
         login.mutate(data);
     };
 
+    const handleGoogleSuccess = (response: CredentialResponse) => {
+        if (response.credential) {
+            googleLogin.mutate({ credential: response.credential });
+        }
+    };
+
+    const error = login.isError ? login.error : googleLogin.isError ? googleLogin.error : null;
+
     return (
         <Box component="form" onSubmit={handleSubmit(onSubmit)} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <Typography variant="h5" sx={{ fontWeight: 700, textAlign: 'center', mb: 0.5 }}>
                 Welcome back
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 1 }}>
-                Enter your credentials to access your account
+                Sign in to access your account
             </Typography>
 
-            {login.isError && (
+            {error && (
                 <Alert severity="error" sx={{ borderRadius: 2 }}>
-                    {extractApiError(login.error, 'Login failed. Please check your credentials.')}
+                    {extractApiError(error, 'Login failed. Please try again.')}
                 </Alert>
             )}
 
+            {/* Google Sign-In */}
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => console.error('Google Login Failed')}
+                    size="large"
+                    width="350"
+                    text="signin_with"
+                    shape="rectangular"
+                    theme="outline"
+                />
+            </Box>
+
+            <Divider sx={{ my: 0.5 }}>or</Divider>
+
+            {/* Email / Password */}
             <Controller
                 name="email"
                 control={control}
@@ -58,7 +84,6 @@ export default function LoginPage() {
                         label="Email"
                         type="email"
                         autoComplete="email"
-                        autoFocus
                         error={!!errors.email}
                         helperText={errors.email?.message}
                         fullWidth
@@ -88,7 +113,7 @@ export default function LoginPage() {
                 variant="contained"
                 size="large"
                 fullWidth
-                loading={login.isPending}
+                loading={login.isPending || googleLogin.isPending}
                 startIcon={<LoginIcon />}
                 sx={{
                     py: 1.4,
