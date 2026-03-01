@@ -53,7 +53,3 @@ export function useLogDetail(experimentId: string, testCaseId: string) {
         enabled: !!experimentId && !!testCaseId,
     });
 }
-
-export function useResults() {
-    return { useDashboard, useLogs, useLogDetail };
-}

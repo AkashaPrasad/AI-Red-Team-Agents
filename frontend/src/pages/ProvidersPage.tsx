@@ -104,10 +104,7 @@ export default function ProvidersPage() {
                         variant="contained"
                         startIcon={<AddIcon />}
                         onClick={handleOpenCreate}
-                        sx={{
-                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)',
-                            px: 3,
-                        }}
+                        sx={{ px: 3 }}
                     >
                         Add Provider
                     </Button>

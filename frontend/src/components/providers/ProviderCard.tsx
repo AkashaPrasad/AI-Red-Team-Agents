@@ -61,16 +61,10 @@ export default function ProviderCard({
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)',
-                '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: (theme) =>
-                        `0 8px 20px -4px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.35)' : 'rgba(99,102,241,0.12)'}`,
-                },
             }}
         >
             {/* Top accent */}
-            <Box sx={{ height: 4, width: '100%', background: gradient, borderRadius: '16px 16px 0 0' }} />
+            <Box sx={{ height: 3, width: '100%', background: gradient, borderRadius: '18px 18px 0 0' }} />
 
             <CardContent sx={{ flex: 1, pt: 2.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>

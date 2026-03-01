@@ -2,7 +2,6 @@
 Shared Pydantic schemas used across multiple API modules.
 """
 
-from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel

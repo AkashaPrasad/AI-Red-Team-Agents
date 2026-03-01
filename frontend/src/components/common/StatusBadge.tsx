@@ -5,7 +5,10 @@
 import Chip, { type ChipProps } from '@mui/material/Chip';
 import Box from '@mui/material/Box';
 
-type Status = 'pass' | 'fail' | 'error' | 'running' | 'pending' | 'completed' | 'cancelled' | 'failed' | 'passed' | 'blocked' | 'active' | 'inactive';
+type Status =
+    | 'pass' | 'fail' | 'error' | 'running' | 'pending'
+    | 'completed' | 'cancelled' | 'failed' | 'passed'
+    | 'blocked' | 'active' | 'inactive';
 
 const COLOR_MAP: Record<Status, ChipProps['color']> = {
     pass: 'success',
@@ -45,6 +48,7 @@ interface StatusBadgeProps {
 export default function StatusBadge({ status, size = 'small' }: StatusBadgeProps) {
     const color = COLOR_MAP[status as Status] ?? 'default';
     const dotColor = DOT_COLORS[status as Status] ?? '#94a3b8';
+    const isRunning = status === 'running';
 
     return (
         <Chip
@@ -52,15 +56,18 @@ export default function StatusBadge({ status, size = 'small' }: StatusBadgeProps
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <Box
                         sx={{
-                            width: 6,
-                            height: 6,
+                            width: 7,
+                            height: 7,
                             borderRadius: '50%',
                             bgcolor: dotColor,
-                            ...(status === 'running' && {
-                                animation: 'pulse 1.5s ease-in-out infinite',
-                                '@keyframes pulse': {
-                                    '0%, 100%': { opacity: 1 },
-                                    '50%': { opacity: 0.4 },
+                            flexShrink: 0,
+                            transition: 'background-color 0.3s ease',
+                            ...(isRunning && {
+                                animation: 'statusPulse 1.4s ease-in-out infinite',
+                                boxShadow: `0 0 6px ${dotColor}`,
+                                '@keyframes statusPulse': {
+                                    '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+                                    '50%': { opacity: 0.5, transform: 'scale(0.85)' },
                                 },
                             }),
                         }}

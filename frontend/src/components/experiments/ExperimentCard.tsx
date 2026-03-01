@@ -17,6 +17,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import TimerIcon from '@mui/icons-material/Timer';
+import Alert from '@mui/material/Alert';
 import ExperimentStatusChip from './ExperimentStatusChip';
 import ExperimentProgress from './ExperimentProgress';
 import { SUB_TYPE_LABELS } from '@/utils/constants';
@@ -59,12 +60,6 @@ export default function ExperimentCard({
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)',
-                '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: (theme) =>
-                        `0 8px 20px -4px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.35)' : 'rgba(99,102,241,0.12)'}`,
-                },
             }}
         >
             <CardContent sx={{ flex: 1 }}>
@@ -136,31 +131,15 @@ export default function ExperimentCard({
                 )}
 
                 {isFailed && experiment.error_message && (
-                    <Box
-                        sx={{
-                            mb: 2,
-                            p: 1.5,
-                            borderRadius: 2,
-                            bgcolor: (theme) =>
-                                theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)',
-                            border: '1px solid',
-                            borderColor: (theme) =>
-                                theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.12)',
-                        }}
+                    <Alert
+                        severity={experiment.error_message.toLowerCase().includes('rate limit') ? 'warning' : 'error'}
+                        sx={{ mb: 2, borderRadius: 2, '& .MuiAlert-message': { fontSize: '0.75rem' } }}
                     >
-                        <Typography
-                            variant="caption"
-                            sx={{
-                                color: 'error.main',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                            }}
-                        >
-                            {experiment.error_message}
-                        </Typography>
-                    </Box>
+                        {experiment.error_message.toLowerCase().includes('rate limit')
+                            ? 'API Key Rate Limit Exceeded — ' + experiment.error_message.replace(/Rate limit exceeded:\s*/i, '')
+                            : experiment.error_message
+                        }
+                    </Alert>
                 )}
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
@@ -194,11 +173,7 @@ export default function ExperimentCard({
                                 `/projects/${projectId}/experiments/${experiment.id}`,
                             )
                         }
-                        sx={{
-                            background: isFailed
-                                ? 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)'
-                                : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                        }}
+                        color={isFailed ? 'error' : 'primary'}
                     >
                         {isFailed ? 'View Partial Results' : 'View Results'}
                     </Button>

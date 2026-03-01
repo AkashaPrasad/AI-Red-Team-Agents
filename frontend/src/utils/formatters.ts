@@ -32,35 +32,11 @@ export function formatDateTime(iso: string | null | undefined): string {
 }
 
 /**
- * Format a relative time string e.g. "2h ago", "3 min ago"
- */
-export function formatRelativeTime(iso: string | null | undefined): string {
-    if (!iso) return '—';
-    const diff = Date.now() - new Date(iso).getTime();
-    const seconds = Math.floor(diff / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-}
-
-/**
  * Format a percentage value e.g. 87.4 → "87.4%"
  */
 export function formatPercent(value: number | null | undefined): string {
     if (value == null) return '—';
     return `${value.toFixed(1)}%`;
-}
-
-/**
- * Format a large number with comma separators e.g. 4521 → "4,521"
- */
-export function formatNumber(value: number | null | undefined): string {
-    if (value == null) return '—';
-    return value.toLocaleString('en-US');
 }
 
 /**

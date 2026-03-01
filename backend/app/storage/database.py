@@ -72,7 +72,7 @@ AsyncSessionLocal = async_sessionmaker(
 # ---------------------------------------------------------------------------
 # Standalone factory for background threads (separate event loop)
 # ---------------------------------------------------------------------------
-def create_standalone_session_factory() -> tuple["AsyncSession", "create_async_engine"]:
+def create_standalone_session_factory() -> tuple:
     """Create a brand-new engine + session factory.
 
     Use this when running in a thread with its own ``asyncio`` event loop

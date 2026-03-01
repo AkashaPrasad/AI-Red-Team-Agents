@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// RegisterPage — email/password + Google OAuth registration
+// RegisterPage — Google OAuth + email/password registration
 // ---------------------------------------------------------------------------
 
 import { useForm, Controller } from 'react-hook-form';
@@ -55,7 +55,7 @@ export default function RegisterPage() {
                 </Alert>
             )}
 
-            {/* Google Sign-Up */}
+            {/* Google Sign-In */}
             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                 <GoogleLogin
                     onSuccess={handleGoogleSuccess}
@@ -70,7 +70,6 @@ export default function RegisterPage() {
 
             <Divider sx={{ my: 0.5 }}>or</Divider>
 
-            {/* Name / Email / Password */}
             <Controller
                 name="full_name"
                 control={control}

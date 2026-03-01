@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class RateLimitExceeded(Exception):
+    """Raised when the provider API key's rate limit is exhausted after all retries."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # JSON-path mini-extractor (supports simple dot-notation / bracket paths)
 # ---------------------------------------------------------------------------
@@ -132,6 +137,22 @@ async def send_prompt(
 
             latency_ms = int((time.monotonic() - start) * 1000)
 
+            if resp.status_code == 429:
+                if attempt < retries - 1:
+                    wait = backoff_base ** attempt
+                    logger.warning(
+                        "Rate limit 429 on attempt %d/%d, retrying in %.1fs",
+                        attempt + 1, retries, wait,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                # All retries exhausted — raise hard stop
+                raise RateLimitExceeded(
+                    f"API rate limit exceeded (HTTP 429). "
+                    f"Exhausted {retries} retries. "
+                    f"Please check your API key quota or upgrade your plan."
+                )
+
             if resp.status_code >= 400:
                 if attempt < retries - 1:
                     await asyncio.sleep(backoff_base ** attempt)
@@ -224,6 +245,7 @@ async def _send_direct(
     from app.services.llm_gateway import LLMGateway
 
     start = time.monotonic()
+    provider_id_str = target.endpoint_url.removeprefix("direct://") if target.endpoint_url else "unknown"
 
     try:
         # If no gateway was passed, load provider from DB (fallback path)
@@ -232,7 +254,6 @@ async def _send_direct(
             from app.storage.database import create_standalone_session_factory
             from app.storage.models.provider import ModelProvider
 
-            provider_id_str = target.endpoint_url.removeprefix("direct://")
             try:
                 provider_uuid = UUID(provider_id_str)
             except ValueError:
@@ -275,8 +296,9 @@ async def _send_direct(
             except Exception as exc:
                 last_exc = exc
                 exc_str = str(exc).lower()
-                # Retry on rate-limit (429) or server errors (5xx)
-                if "429" in exc_str or "rate" in exc_str or "too many" in exc_str or "503" in exc_str:
+                is_rate_limit = "429" in exc_str or "rate" in exc_str or "too many" in exc_str
+                is_server_error = "503" in exc_str
+                if is_rate_limit or is_server_error:
                     wait = backoff_base ** attempt
                     logger.warning(
                         "Direct call rate-limited (attempt %d/%d), retrying in %.1fs: %s",
@@ -287,8 +309,15 @@ async def _send_direct(
                 # Non-retryable error
                 raise
 
-        # All retries exhausted
+        # All retries exhausted — raise RateLimitExceeded for 429 errors
         latency_ms = int((time.monotonic() - start) * 1000)
+        last_exc_str = str(last_exc).lower() if last_exc else ""
+        if "429" in last_exc_str or "rate" in last_exc_str or "too many" in last_exc_str:
+            raise RateLimitExceeded(
+                f"API rate limit exceeded for provider {provider_id_str}. "
+                f"Exhausted {retries} retries. "
+                f"Please check your API key quota or upgrade your plan."
+            )
         logger.error("Direct provider call exhausted %d retries for %s: %s", retries, provider_id_str, last_exc)
         return None, latency_ms
 

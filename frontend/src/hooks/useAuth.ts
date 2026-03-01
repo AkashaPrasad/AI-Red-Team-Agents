@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// useAuth — login, register, Google OAuth mutations, user query
+// useAuth — login / register / Google login mutations, user query
 // ---------------------------------------------------------------------------
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

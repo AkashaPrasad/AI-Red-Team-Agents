@@ -32,7 +32,7 @@ from app.engine.context import (
     ProviderInfo,
     TargetConfig,
 )
-from app.engine.executor import init_thread, send_prompt
+from app.engine.executor import RateLimitExceeded, init_thread, send_prompt
 from app.engine.generator import GeneratedPrompt, generate_prompts
 from app.engine.judge import evaluate as judge_evaluate
 from app.engine.planner import create_test_plan
@@ -40,7 +40,7 @@ from app.engine.sampler import select_representatives
 from app.engine.scorer import compute_analytics, generate_insights
 from app.services.encryption import decrypt_value
 from app.services.llm_gateway import LLMGateway
-from app.storage.database import AsyncSessionLocal, create_standalone_session_factory
+from app.storage.database import create_standalone_session_factory
 from app.storage.models.experiment import Experiment
 from app.storage.models.project import Project
 from app.storage.models.provider import ModelProvider
@@ -169,8 +169,7 @@ async def _update_progress(
     if rd:
         try:
             key = f"experiment:{experiment_id}:progress"
-            await rd.hset(key, mapping={"completed": completed, "total": total})
-            await rd.expire(key, 86400)
+            await rd.set(key, f"{completed}/{total}", ex=86400)
             await rd.aclose()
         except Exception:
             pass
@@ -303,6 +302,20 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                 )
                 all_prompts.extend(prompts)
                 seq += len(prompts)
+        except RateLimitExceeded as e:
+            logger.error("Prompt generation stopped — rate limit exceeded: %s", e)
+            await session.execute(
+                update(Experiment)
+                .where(Experiment.id == experiment_id)
+                .values(
+                    status="failed",
+                    error_message=f"Rate limit exceeded during prompt generation: {e}",
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await session.commit()
+            return
+
         except Exception as e:
             logger.exception("Prompt generation failed for %s", experiment_id)
             await session.execute(
@@ -447,6 +460,14 @@ async def run_experiment_async(experiment_id: UUID) -> None:
                     .values(progress_completed=completed)
                 )
                 await session.commit()
+
+        except RateLimitExceeded as e:
+            logger.error("Experiment %s stopped — rate limit exceeded at test %d: %s", experiment_id, completed, e)
+            failure_reason = f"Rate limit exceeded: {e}"
+            try:
+                await session.rollback()
+            except Exception:
+                pass
 
         except Exception as e:
             logger.exception("Experiment %s execution failed at test %d: %s", experiment_id, completed, e)

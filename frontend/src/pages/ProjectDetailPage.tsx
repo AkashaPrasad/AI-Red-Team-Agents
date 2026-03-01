@@ -274,9 +274,6 @@ function ExperimentsTab({ projectId }: { projectId: string }) {
                     variant="contained"
                     startIcon={<AddIcon />}
                     onClick={() => navigate(`/projects/${projectId}/experiments/new`)}
-                    sx={{
-                        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)',
-                    }}
                 >
                     New Experiment
                 </Button>

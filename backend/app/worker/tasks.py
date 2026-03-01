@@ -31,9 +31,9 @@ def run_experiment_task(self, experiment_id: str) -> dict:
     try:
         from app.engine.runner import run_experiment
 
-        result = run_experiment(experiment_id)
-        logger.info("Experiment %s completed: %s", experiment_id, result.get("status"))
-        return result
+        run_experiment(experiment_id)
+        logger.info("Experiment %s completed", experiment_id)
+        return {"experiment_id": experiment_id, "status": "completed"}
 
     except Exception as exc:
         logger.exception("Experiment %s failed with unhandled error", experiment_id)

@@ -42,11 +42,3 @@ export function useProviders() {
 
     return { list, create, update, remove, validate };
 }
-
-export function useProvider(id: string) {
-    return useQuery({
-        queryKey: KEYS.detail(id),
-        queryFn: () => providerService.getProvider(id),
-        enabled: !!id,
-    });
-}

@@ -10,9 +10,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
 import Button from '@mui/material/Button';
-import Alert from '@mui/material/Alert';
 import LoadingButton from '@mui/lab/LoadingButton';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import type { Project, ProjectUpdate } from '@/types/project';
 
@@ -41,7 +39,6 @@ export default function ProjectSettings({
     onDelete,
 }: ProjectSettingsProps) {
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [newApiKey, _setNewApiKey] = useState<string | null>(null);
 
     const {
         control,
@@ -120,25 +117,6 @@ export default function ProjectSettings({
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Key prefix: <strong>{project.api_key_prefix ?? 'Not generated'}</strong>
                 </Typography>
-
-                {newApiKey && (
-                    <Alert
-                        severity="success"
-                        sx={{ mb: 2 }}
-                        action={
-                            <Button
-                                size="small"
-                                startIcon={<ContentCopyIcon />}
-                                onClick={() => navigator.clipboard.writeText(newApiKey)}
-                            >
-                                Copy
-                            </Button>
-                        }
-                    >
-                        New API key: <code>{newApiKey}</code> — save it now, it won't be shown
-                        again.
-                    </Alert>
-                )}
 
                 <LoadingButton
                     variant="outlined"

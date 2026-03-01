@@ -7,11 +7,6 @@ import type { CursorPaginatedResponse } from './api';
 export type FirewallRuleType = 'block_pattern' | 'allow_pattern' | 'custom_policy';
 export type FirewallVerdictStatus = 'passed' | 'blocked';
 
-export interface FirewallEvalRequest {
-    prompt: string;
-    agent_prompt?: string;
-}
-
 export interface FirewallRuleCreate {
     name: string;
     rule_type: FirewallRuleType;
@@ -27,14 +22,6 @@ export interface FirewallRuleUpdate {
     policy?: string;
     priority?: number;
     is_active?: boolean;
-}
-
-export interface FirewallVerdictResponse {
-    status: FirewallVerdictStatus;
-    fail_category: string | null;
-    explanation: string | null;
-    confidence: number | null;
-    matched_rule: string | null;
 }
 
 export interface FirewallRule {

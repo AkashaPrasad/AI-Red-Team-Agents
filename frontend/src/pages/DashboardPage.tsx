@@ -63,10 +63,7 @@ export default function DashboardPage() {
                         variant="contained"
                         startIcon={<AddIcon />}
                         onClick={() => setModalOpen(true)}
-                        sx={{
-                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)',
-                            px: 3,
-                        }}
+                        sx={{ px: 3 }}
                     >
                         Create Project
                     </Button>
@@ -81,9 +78,11 @@ export default function DashboardPage() {
                     gap: 2,
                     mb: 3,
                     flexWrap: 'wrap',
-                    p: 2,
+                    p: 2.5,
                     alignItems: 'center',
-                    borderRadius: 3,
+                    borderRadius: 4,
+                    transition: 'border-color 0.2s ease',
+                    '&:hover': { borderColor: 'primary.main' },
                 }}
             >
                 <TextField
@@ -152,8 +151,8 @@ export default function DashboardPage() {
                         <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
                             <Skeleton
                                 variant="rounded"
-                                height={200}
-                                sx={{ borderRadius: 4 }}
+                                height={220}
+                                sx={{ borderRadius: 4.5 }}
                             />
                         </Grid>
                     ))}

@@ -17,12 +17,6 @@ export const FEEDBACK_COMMENT_MAX_LENGTH = 150;
 /** Sidebar width (px) */
 export const SIDEBAR_WIDTH = 260;
 
-/** Sidebar collapsed width (px) */
-export const SIDEBAR_COLLAPSED_WIDTH = 72;
-
-/** App title */
-export const APP_TITLE = 'AI Red Team Agent';
-
 /** Testing level metadata */
 export const TESTING_LEVELS = {
     basic: { label: 'Basic', tests: '~500', duration: '5–15 min' },
@@ -45,11 +39,4 @@ export const SEVERITY_COLORS = {
     high: '#d32f2f',
     medium: '#ed6c02',
     low: '#2e7d32',
-} as const;
-
-/** Verdict result colours */
-export const RESULT_COLORS = {
-    pass: '#2e7d32',
-    fail: '#d32f2f',
-    error: '#ed6c02',
 } as const;

@@ -32,27 +32,20 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)',
-                '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: (theme) =>
-                        `0 12px 24px -4px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.4)' : 'rgba(99,102,241,0.15)'}`,
-                },
             }}
         >
             <CardActionArea
                 onClick={() => navigate(`/projects/${project.id}`)}
                 sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
             >
-                {/* Top accent */}
                 <Box
                     sx={{
-                        height: 4,
+                        height: 3,
                         width: '100%',
                         background: project.is_active
-                            ? 'linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899)'
+                            ? 'linear-gradient(90deg, #6366f1, #818cf8, #a78bfa)'
                             : (theme) => theme.palette.action.disabledBackground,
-                        borderRadius: '16px 16px 0 0',
+                        borderRadius: '18px 18px 0 0',
                     }}
                 />
                 <CardContent sx={{ flex: 1, pt: 2.5 }}>

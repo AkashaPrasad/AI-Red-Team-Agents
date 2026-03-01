@@ -18,16 +18,6 @@ export interface CursorPaginatedResponse<T> {
     has_more: boolean;
 }
 
-/** Generic error body returned by the API */
-export interface ApiError {
-    detail: string;
-}
-
-/** Generic message body returned by the API */
-export interface MessageResponse {
-    message: string;
-}
-
 /** Brief user reference embedded in other responses */
 export interface UserBrief {
     id: string;

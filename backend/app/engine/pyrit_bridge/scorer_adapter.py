@@ -43,10 +43,11 @@ async def score_with_judge(
     from app.engine.judge import evaluate
 
     verdict = await evaluate(
-        prompt=prompt,
-        response=response,
+        ctx=context,
+        gateway=context.gateway,
+        test_prompt=prompt,
+        ai_response=response,
         risk_category=risk_category,
-        context=context,
         conversation=conversation,
     )
 

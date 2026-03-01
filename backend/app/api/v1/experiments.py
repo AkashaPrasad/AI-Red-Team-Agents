@@ -9,7 +9,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -211,9 +211,7 @@ async def create_experiment(
     # Dispatch experiment execution.
     # In development, run in-process via asyncio.create_task (no Celery worker needed).
     # In production, dispatch to Celery.
-    from app.config import settings as app_settings
-
-    use_celery = app_settings.app_env == "production"
+    use_celery = settings.app_env == "production"
 
     if use_celery:
         try:
@@ -467,7 +465,6 @@ async def delete_experiment(
     await session.delete(experiment)
     await session.flush()
 
-    from fastapi.responses import Response
     return Response(status_code=204)
 
 
